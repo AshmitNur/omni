@@ -1,0 +1,217 @@
+@import "tailwindcss";
+
+@theme {
+  --color-void: #07080A;
+  --color-obsidian: #0D0F12;
+  --color-obsidian-mid: #131619;
+  --color-obsidian-lift: #1A1D22;
+  --color-obsidian-rim: #20242B;
+
+  --color-chrome-dark: #3A3F4A;
+  --color-chrome: #6B7280;
+  --color-chrome-light: #9CA3AF;
+  --color-silver: #C8CDD6;
+  --color-platinum: #E8ECF0;
+
+  --color-accent: #5B8DEF;
+
+  --font-display: "Syne", sans-serif;
+  --font-body: "DM Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+@layer base {
+  :root {
+    /* Base colors from design system */
+    --color-void: #07080A;
+    --color-obsidian: #0D0F12;
+    --color-obsidian-mid: #131619;
+    --color-obsidian-lift: #1A1D22;
+    --color-obsidian-rim: #20242B;
+
+    --color-chrome-dark: #3A3F4A;
+    --color-chrome: #6B7280;
+    --color-chrome-light: #9CA3AF;
+    --color-silver: #C8CDD6;
+    --color-platinum: #E8ECF0;
+
+    --color-accent: #5B8DEF;
+    --color-accent-glow: rgba(91, 141, 239, 0.20);
+    --color-accent-muted: rgba(91, 141, 239, 0.12);
+
+    --color-success: #3FB97A;
+    --color-error: #E05C6B;
+    --color-warning: #D4924A;
+
+    /* Frosted Glass */
+    --glass-bg: rgba(255, 255, 255, 0.04);
+    --glass-bg-hover: rgba(255, 255, 255, 0.07);
+    --glass-bg-active: rgba(255, 255, 255, 0.10);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-bright: rgba(255, 255, 255, 0.16);
+    --glass-shine: rgba(255, 255, 255, 0.03);
+
+    /* Gradients */
+    --grad-metal: linear-gradient(135deg, #3A3F4A 0%, #6B7280 40%, #9CA3AF 60%, #6B7280 100%);
+    --grad-chrome: linear-gradient(180deg, #C8CDD6 0%, #8C9199 50%, #C8CDD6 100%);
+
+    /* Fonts */
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Type Scale */
+    --text-2xs: 0.625rem;
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 1.875rem;
+    --text-4xl: 2.25rem;
+    --text-5xl: 3rem;
+  }
+
+  body {
+    background-color: var(--color-obsidian);
+    color: var(--color-platinum);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  /* Typography */
+  .text-brand-hero {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: var(--text-5xl);
+    background: var(--grad-chrome);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+  }
+
+  .text-section-heading {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--text-2xl);
+    color: var(--color-silver);
+    letter-spacing: -0.02em;
+  }
+
+  .text-body {
+    font-family: var(--font-body);
+    font-weight: 400;
+    font-size: var(--text-base);
+    color: var(--color-chrome-light);
+    line-height: 1.65;
+  }
+
+  .text-label {
+    font-family: var(--font-body);
+    font-weight: 500;
+    font-size: var(--text-sm);
+    color: var(--color-chrome);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  /* Glass Surfaces */
+  .glass-surface {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-top: 1px solid var(--glass-border-bright);
+    border-radius: 16px;
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow:
+      0 0 0 0.5px rgba(255,255,255,0.04) inset,
+      0 4px 24px rgba(0, 0, 0, 0.40),
+      0 1px 2px rgba(0, 0, 0, 0.60);
+  }
+
+  .glass-surface:hover {
+    background: var(--glass-bg-hover);
+    border-color: var(--glass-border-bright);
+    transition: all 180ms ease;
+  }
+
+  /* Glass Depth Levels */
+  .glass-0 { backdrop-filter: blur(32px); background: rgba(255,255,255,0.06); }
+  .glass-1 { backdrop-filter: blur(24px); background: rgba(255,255,255,0.04); }
+  .glass-2 { backdrop-filter: blur(12px); background: rgba(255,255,255,0.03); }
+  .glass-3 { backdrop-filter: blur(8px); background: rgba(255,255,255,0.05); }
+
+  /* Inputs */
+  .input-field {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    color: var(--color-platinum);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    padding: 12px 16px;
+    transition: border-color 200ms, box-shadow 200ms;
+    width: 100%;
+  }
+
+  .input-field:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-accent-muted);
+  }
+
+  .input-field::placeholder {
+    color: var(--color-chrome-dark);
+  }
+
+  /* Buttons */
+  .btn-primary {
+    background: var(--color-accent);
+    border: 1px solid rgba(91, 141, 239, 0.4);
+    border-radius: 10px;
+    color: #fff;
+    font-family: var(--font-body);
+    font-weight: 500;
+    font-size: var(--text-sm);
+    padding: 10px 20px;
+    letter-spacing: 0.02em;
+    box-shadow: 0 0 20px var(--color-accent-glow);
+    transition: all 150ms ease;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-primary:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 0 32px var(--color-accent-glow);
+    transform: translateY(-1px);
+  }
+
+  .btn-ghost {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border-bright);
+    border-radius: 10px;
+    color: var(--color-chrome-light);
+    padding: 10px 20px;
+    backdrop-filter: blur(8px);
+    transition: all 150ms ease;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-ghost:hover {
+    background: var(--glass-bg-active);
+    color: var(--color-platinum);
+  }
+}
