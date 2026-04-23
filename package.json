@@ -1,0 +1,9 @@
+{
+  "name": "omni-root",
+  "private": true,
+  "scripts": {
+    "install-all": "npm install --prefix webapp",
+    "build": "npm run build --prefix webapp",
+    "dev": "npm run dev --prefix webapp"
+  }
+}
