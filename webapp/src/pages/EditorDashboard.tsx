@@ -84,7 +84,7 @@ export default function EditorDashboard() {
         </div>
       </nav>
 
-      <div className="flex flex-1 pt-[60px] md:pt-[80px] max-w-[1400px] w-full mx-auto px-4 md:px-6 gap-6 pb-[80px] md:pb-8 h-[calc(100vh-60px)] md:h-screen overflow-hidden">
+      <div className="flex flex-1 pt-[60px] md:pt-[80px] max-w-[1400px] w-full mx-auto px-2 md:px-6 gap-6 pb-[90px] md:pb-8 h-[calc(100vh-60px)] md:h-screen overflow-hidden relative">
         
         {/* Sidebar */}
         <GlowCard customSize glowColor="purple" className="w-[260px] hidden md:block h-full shrink-0 !p-0">
@@ -139,8 +139,8 @@ export default function EditorDashboard() {
         </GlowCard>
 
         {/* Main Content */}
-        <GlowCard customSize glowColor="blue" className="flex-1 h-full !p-0 overflow-hidden">
-          <div className="flex flex-col min-h-full w-full relative">
+        <GlowCard customSize glowColor="blue" className="flex-1 h-full !p-0 overflow-hidden relative">
+          <div className="flex flex-col h-full w-full relative overflow-y-auto no-scrollbar">
             <Routes>
               <Route path="/" element={<ProfileEditor profile={profile} setProfile={setProfile} />} />
               <Route path="/profile" element={<ProfileEditor profile={profile} setProfile={setProfile} />} />
@@ -191,7 +191,7 @@ export default function EditorDashboard() {
       </div>
 
       {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 h-[70px] bg-[#0D0F12]/80 backdrop-blur-xl border-t border-white/10 z-50 px-4 flex items-center justify-between pb-safe">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 h-[80px] bg-[#0D0F12]/90 backdrop-blur-2xl border-t border-white/10 z-50 px-4 flex items-center justify-between pb-safe">
         <div className="flex flex-1 justify-around">
           {navItems.map((item) => {
             const isActive = currentPath === item.id || (currentPath === 'editor' && item.id === 'profile');
@@ -206,7 +206,7 @@ export default function EditorDashboard() {
                 )}
               >
                 <Icon className="w-5 h-5" />
-                <span className="text-[10px] font-medium uppercase tracking-wider">{item.label}</span>
+                <span className="text-[9px] font-medium uppercase tracking-wider">{item.label}</span>
                 {isActive && (
                   <motion.div 
                     layoutId="mobile-nav-indicator"
@@ -220,12 +220,24 @@ export default function EditorDashboard() {
         
         <div className="w-px h-8 bg-white/10 mx-2" />
         
-        <button 
-          onClick={handleSave}
-          className="p-3 bg-blue-500 rounded-xl text-white shadow-lg active:scale-95 transition-transform"
-        >
-          <CheckCircle2 className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => {
+              const storageKey = user ? `omni-profile-${user.uid}` : 'omni-profile-guest';
+              localStorage.setItem(storageKey, JSON.stringify(profile));
+              navigate('/profile/demo');
+            }}
+            className="p-3 bg-white/5 border border-white/10 rounded-xl text-white/80 active:scale-95 transition-transform"
+          >
+            <ArrowRight className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={handleSave}
+            className="p-3 bg-blue-500 rounded-xl text-white shadow-[0_0_15px_rgba(59,130,246,0.4)] active:scale-95 transition-transform"
+          >
+            <CheckCircle2 className="w-5 h-5" />
+          </button>
+        </div>
       </div>
     </div>
   );
