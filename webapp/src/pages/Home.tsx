@@ -43,8 +43,11 @@ export default function Home() {
           Create a polished public identity page with authentication, media,
           content, and a shareable URL.
         </p>
-|
-        <div className="mt-10">
+        <div className="flex flex-col items-center gap-4 mt-8">
+          <div className="w-[1px] h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+        </div>
+
+        <div className="mt-6">
           <LiquidButton 
             className="text-white/90 font-semibold border border-white/10 rounded-full px-8 backdrop-blur-md" 
             size="xl"
