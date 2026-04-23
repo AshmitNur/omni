@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { User, Image as ImageIcon, Link as LinkIcon, LogOut, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { User, Image as ImageIcon, Link as LinkIcon, LogOut, ArrowRight, CheckCircle2, Eye } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { GlowCard } from '../components/ui/spotlight-card';
 import clsx from 'clsx';
@@ -227,15 +227,17 @@ export default function EditorDashboard() {
               localStorage.setItem(storageKey, JSON.stringify(profile));
               navigate('/profile/demo');
             }}
-            className="p-3 bg-white/5 border border-white/10 rounded-xl text-white/80 active:scale-95 transition-transform"
+            className="flex flex-col items-center gap-1 p-2 bg-white/5 border border-white/10 rounded-xl text-white/80 active:scale-95 transition-transform"
           >
-            <ArrowRight className="w-5 h-5" />
+            <Eye className="w-5 h-5" />
+            <span className="text-[8px] font-bold uppercase tracking-tighter">Preview</span>
           </button>
           <button 
             onClick={handleSave}
-            className="p-3 bg-blue-500 rounded-xl text-white shadow-[0_0_15px_rgba(59,130,246,0.4)] active:scale-95 transition-transform"
+            className="flex flex-col items-center gap-1 p-2 bg-blue-500 rounded-xl text-white shadow-[0_0_15px_rgba(59,130,246,0.4)] active:scale-95 transition-transform min-w-[50px]"
           >
             <CheckCircle2 className="w-5 h-5" />
+            <span className="text-[8px] font-bold uppercase tracking-tighter">Save</span>
           </button>
         </div>
       </div>
