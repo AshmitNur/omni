@@ -167,14 +167,10 @@ const GlowCard: React.FC<GlowCardProps> = ({
         style={getInlineStyles()}
         className={`
           ${getSizeClasses()}
-          ${!customSize ? 'aspect-[3/4]' : ''}
+          ${!customSize ? 'aspect-[3/4] grid grid-rows-[1fr_auto] p-4 gap-4' : 'flex flex-col'}
           rounded-2xl 
           relative 
-          grid 
-          grid-rows-[1fr_auto] 
           shadow-[0_1rem_2rem_-1rem_black] 
-          p-4 
-          gap-4 
           backdrop-blur-[5px]
           ${className}
         `}
