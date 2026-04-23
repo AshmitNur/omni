@@ -44,7 +44,7 @@ export default function Home() {
           content, and a shareable URL.
         </p>
         <div className="flex flex-col items-center gap-4 mt-8">
-          <div className="w-[1px] h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+          <div className="w-[2px] h-12 bg-gradient-to-b from-transparent via-white/40 to-transparent shadow-[0_0_8px_rgba(255,255,255,0.1)]" />
         </div>
 
         <div className="mt-6">
