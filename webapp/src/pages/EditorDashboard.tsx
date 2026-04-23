@@ -139,7 +139,7 @@ export default function EditorDashboard() {
         </GlowCard>
 
         {/* Main Content */}
-        <GlowCard customSize glowColor="blue" className="flex-1 h-full !p-0 overflow-y-auto">
+        <GlowCard customSize glowColor="blue" className="flex-1 h-full !p-0 overflow-hidden">
           <div className="flex flex-col min-h-full w-full relative">
             <Routes>
               <Route path="/" element={<ProfileEditor profile={profile} setProfile={setProfile} />} />
