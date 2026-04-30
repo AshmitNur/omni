@@ -90,47 +90,62 @@ export async function loginWithPassword(email: string, password: string): Promis
   return user;
 }
 
-// ─── Auth: Register (IAM Create User) ──────────────────────────
-export async function registerUser(
+// ─── Auth: Public Signup (Step 1: Request Code) ────────────────
+export async function requestSignup(email: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/identifier/v1/People/Signup`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-blocks-key': X_BLOCKS_KEY,
+    },
+    body: JSON.stringify({ email, captchaCode: '' }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.errors?.Email || err.error_description || err.message || 'Signup request failed');
+  }
+
+  const data = await res.json();
+  if (data.errors && data.errors.Email) {
+    throw new Error(data.errors.Email);
+  }
+  return data.isSuccess;
+}
+
+// ─── Auth: Activate Account (Step 2: Submit Details & Code) ────
+export async function activateAccount(
   firstName: string,
   lastName: string,
-  email: string,
-  password: string
-): Promise<{ itemId: string }> {
-  // Try the direct creation endpoint (requires admin context/token usually)
-  const res = await fetch(`${API_BASE}/idp/v1/Iam/Create`, {
+  password: string,
+  code: string
+): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/idp/v1/Iam/Activate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-blocks-key': X_BLOCKS_KEY,
     },
     body: JSON.stringify({
-      email,
-      userName: email,
+      firstname: firstName,
+      lastname: lastName,
       password,
-      firstName,
-      lastName,
-      language: 'en-US',
-      mailPurpose: 'user_creation',
-      userPassType: 0,
-      userCreationType: 0,
-      varifiedType: 0,
-      platform: 'web',
-      mfaEnabled: false,
-      allowedLogInType: [0],
+      code,
+      captchaCode: '',
       projectKey: X_BLOCKS_KEY,
     }),
   });
 
   if (!res.ok) {
-    if (res.status === 401) {
-      throw new Error('Registration failed: Email/Password Sign-up is disabled for this project, or the API requires administrative privileges. Please enable it in the Selise Blocks dashboard or create users manually.');
-    }
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error_description || err.message || 'Registration failed');
+    throw new Error(err.error_description || err.message || 'Activation failed. Invalid code.');
   }
 
-  return res.json();
+  const data = await res.json();
+  if (!data.isSuccess) {
+    throw new Error('Activation failed. Please check your code.');
+  }
+  return true;
 }
 
 // ─── Auth: Refresh Token ───────────────────────────────────────
