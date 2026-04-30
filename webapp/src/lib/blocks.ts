@@ -71,7 +71,7 @@ export async function loginWithPassword(email: string, password: string): Promis
   body.append('username', email);
   body.append('password', password);
 
-  const res = await fetch(`${API_BASE}/authentication/v1/OAuth/Token`, {
+  const res = await fetch(`${API_BASE}/idp/v1/Authentication/Token`, {
     method: 'POST',
     headers: { 'x-blocks-key': X_BLOCKS_KEY },
     body,
@@ -97,6 +97,7 @@ export async function registerUser(
   email: string,
   password: string
 ): Promise<{ itemId: string }> {
+  // Try the direct creation endpoint (requires admin context/token usually)
   const res = await fetch(`${API_BASE}/idp/v1/Iam/Create`, {
     method: 'POST',
     headers: {
@@ -122,6 +123,9 @@ export async function registerUser(
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error('Registration failed: Email/Password Sign-up is disabled for this project, or the API requires administrative privileges. Please enable it in the Selise Blocks dashboard or create users manually.');
+    }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error_description || err.message || 'Registration failed');
   }
@@ -138,7 +142,7 @@ export async function refreshAccessToken(): Promise<boolean> {
   body.append('grant_type', 'refresh_token');
   body.append('refresh_token', rt);
 
-  const res = await fetch(`${API_BASE}/authentication/v1/OAuth/Token`, {
+  const res = await fetch(`${API_BASE}/idp/v1/Authentication/Token`, {
     method: 'POST',
     headers: { 'x-blocks-key': X_BLOCKS_KEY },
     body,
