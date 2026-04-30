@@ -3,11 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
 import MagicButton from '../components/MagicButton';
 import { GlowCard } from '../components/ui/spotlight-card';
-import { auth } from '../lib/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { loginWithPassword } from '../lib/blocks';
+import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -19,7 +20,8 @@ export default function Login() {
     setLoading(true);
     
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await loginWithPassword(email, password);
+      await refreshUser();
       navigate('/editor');
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');

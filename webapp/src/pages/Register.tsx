@@ -3,11 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, AlertCircle } from 'lucide-react';
 import MagicButton from '../components/MagicButton';
 import { GlowCard } from '../components/ui/spotlight-card';
-import { auth } from '../lib/firebase';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { registerUser, loginWithPassword } from '../lib/blocks';
+import { useAuth } from '../context/AuthContext';
 
 export default function Register() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,10 +21,17 @@ export default function Register() {
     setLoading(true);
     
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(userCredential.user, {
-        displayName: name
-      });
+      // Split name into first and last
+      const parts = name.trim().split(/\s+/);
+      const firstName = parts[0] || name;
+      const lastName = parts.slice(1).join(' ') || '';
+
+      // Create user via Selise IAM
+      await registerUser(firstName, lastName, email, password);
+
+      // Auto-login after registration
+      await loginWithPassword(email, password);
+      await refreshUser();
       navigate('/editor');
     } catch (err: any) {
       setError(err.message || 'Failed to create account');

@@ -1,25 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { User, Image as ImageIcon, Link as LinkIcon, LogOut, ArrowRight, CheckCircle2, Eye } from 'lucide-react';
+import { User, Image as ImageIcon, Link as LinkIcon, LogOut, ArrowRight, CheckCircle2, Eye, GripVertical } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { GlowCard } from '../components/ui/spotlight-card';
 import clsx from 'clsx';
 import { useAuth } from '../context/AuthContext';
-import { auth } from '../lib/firebase';
-import { signOut } from 'firebase/auth';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 export default function EditorDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const currentPath = location.pathname.split('/').pop() || 'profile';
 
   const [profile, setProfile] = useState(() => {
-    const storageKey = user ? `omni-profile-${user.uid}` : 'omni-profile-guest';
+    const storageKey = user ? `omni-profile-${user.itemId}` : 'omni-profile-guest';
     const saved = localStorage.getItem(storageKey);
     const defaultData = {
-      displayName: user?.displayName || 'Avery Stone',
-      username: user?.email?.split('@')[0] || 'ashmitnur',
+      displayName: user?.displayName || user?.firstName || 'Avery Stone',
+      username: user?.userName || user?.email?.split('@')[0] || 'ashmitnur',
       headline: 'Product-minded developer',
       bio: '',
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100',
@@ -41,10 +42,42 @@ export default function EditorDashboard() {
     return defaultData;
   });
 
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstRender = useRef(true);
+
+  // Auto-save with 1.5s debounce
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    setSaveStatus('unsaved');
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      const storageKey = user ? `omni-profile-${user.itemId}` : 'omni-profile-guest';
+      localStorage.setItem(storageKey, JSON.stringify(profile));
+      setSaveStatus('saving');
+      // Brief "saving" flash, then "saved"
+      setTimeout(() => setSaveStatus('saved'), 400);
+    }, 1500);
+
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [profile, user]);
+
   const handleSave = () => {
-    const storageKey = user ? `omni-profile-${user.uid}` : 'omni-profile-guest';
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    const storageKey = user ? `omni-profile-${user.itemId}` : 'omni-profile-guest';
     localStorage.setItem(storageKey, JSON.stringify(profile));
-    alert('Changes saved successfully!');
+    setSaveStatus('saving');
+    setTimeout(() => setSaveStatus('saved'), 400);
   };
 
   const navItems = [
@@ -65,7 +98,7 @@ export default function EditorDashboard() {
           <button 
             className="hidden sm:flex items-center text-xs font-medium px-3 py-1.5 rounded-md border border-white/10 hover:bg-white/5 text-white/80 transition-colors" 
             onClick={() => {
-              const storageKey = user ? `omni-profile-${user.uid}` : 'omni-profile-guest';
+              const storageKey = user ? `omni-profile-${user.itemId}` : 'omni-profile-guest';
               localStorage.setItem(storageKey, JSON.stringify(profile));
               navigate('/profile/demo');
             }}
@@ -74,8 +107,8 @@ export default function EditorDashboard() {
           </button>
           <button 
             className="flex items-center text-xs font-medium px-3 py-1.5 rounded-md border border-white/10 hover:bg-white/5 text-white/80 transition-colors" 
-            onClick={async () => {
-              await signOut(auth);
+            onClick={() => {
+              signOut();
               navigate('/login');
             }}
           >
@@ -154,8 +187,17 @@ export default function EditorDashboard() {
         <GlowCard customSize glowColor="green" className="w-[340px] hidden lg:block h-full shrink-0 !p-0">
           <div className="flex flex-col h-full w-full p-6">
           <div className="flex items-center gap-2 mb-6">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-            <span className="text-xs text-white/60 font-medium">All changes saved</span>
+            <div className={clsx(
+              "w-2 h-2 rounded-full transition-colors duration-300",
+              saveStatus === 'saved' && "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]",
+              saveStatus === 'saving' && "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)] animate-pulse",
+              saveStatus === 'unsaved' && "bg-white/30"
+            )} />
+            <span className="text-xs text-white/60 font-medium">
+              {saveStatus === 'saved' && 'All changes saved'}
+              {saveStatus === 'saving' && 'Saving...'}
+              {saveStatus === 'unsaved' && 'Unsaved changes'}
+            </span>
           </div>
 
           {/* Mini Profile Card */}
@@ -381,11 +423,81 @@ function MediaEditor({ profile, setProfile }: { profile: any, setProfile: any })
   );
 }
 
+function SortableLinkItem({ link, updateLink, removeLink }: { link: any, updateLink: (id: number, field: string, value: string) => void, removeLink: (id: number) => void }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: link.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : 'auto' as any,
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style}
+      className={clsx(
+        "flex flex-col gap-2 p-3 rounded-xl bg-white/5 border border-white/5 md:flex-row md:items-center md:gap-3 animate-fade-in",
+        isDragging && "shadow-[0_0_30px_rgba(59,130,246,0.2)] border-blue-500/30"
+      )}
+    >
+      {/* Drag Handle */}
+      <button
+        className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-white/10 text-white/30 hover:text-white/60 transition-colors cursor-grab active:cursor-grabbing shrink-0 touch-none"
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="w-4 h-4" />
+      </button>
+
+      <input 
+        type="text" 
+        className="w-full md:w-1/4 bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:border-blue-500/50 outline-none" 
+        value={link.platform} 
+        onChange={(e) => updateLink(link.id, 'platform', e.target.value)}
+        placeholder="Platform"
+      />
+      <input 
+        type="url" 
+        className="w-full flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:border-blue-500/50 outline-none" 
+        value={link.url} 
+        onChange={(e) => updateLink(link.id, 'url', e.target.value)}
+        placeholder="URL"
+      />
+      <button 
+        onClick={() => removeLink(link.id)}
+        className="text-xs text-red-400/60 hover:text-red-400 p-1.5 self-end md:self-auto transition-colors shrink-0"
+      >
+        Remove
+      </button>
+    </div>
+  );
+}
+
 function LinksEditor({ profile, setProfile }: { profile: any, setProfile: any }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
   const updateLink = (id: number, field: string, value: string) => {
     const newLinks = (profile.links || []).map((l: any) => 
       l.id === id ? { ...l, [field]: value } : l
     );
+    setProfile((prev: any) => ({ ...prev, links: newLinks }));
+  };
+
+  const removeLink = (id: number) => {
+    const newLinks = (profile.links || []).filter((l: any) => l.id !== id);
     setProfile((prev: any) => ({ ...prev, links: newLinks }));
   };
 
@@ -396,43 +508,44 @@ function LinksEditor({ profile, setProfile }: { profile: any, setProfile: any })
     setProfile((prev: any) => ({ ...prev, links: newLinks }));
   };
 
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const currentLinks = profile.links || [];
+    const oldIndex = currentLinks.findIndex((l: any) => l.id === active.id);
+    const newIndex = currentLinks.findIndex((l: any) => l.id === over.id);
+
+    const reordered = arrayMove(currentLinks, oldIndex, newIndex);
+    setProfile((prev: any) => ({ ...prev, links: reordered }));
+  };
+
+  const linkIds = (profile.links || []).map((l: any) => l.id);
+
   return (
     <div className="p-4 md:p-8 space-y-6 md:space-y-8 animate-fade-in-up">
       <header>
         <span className="text-[10px] md:text-xs font-semibold tracking-wider text-white/40 uppercase mb-1 md:mb-2 block">Connect</span>
         <h1 className="text-2xl md:text-3xl font-semibold text-white tracking-tight">Social Links</h1>
+        <p className="text-xs text-white/30 mt-1">Drag to reorder · changes auto-save</p>
       </header>
 
       <div className="space-y-4 md:space-y-6 max-w-2xl">
-        <div className="space-y-3 md:space-y-4">
-          {(profile.links || []).map((link: any) => (
-            <div key={link.id} className="flex flex-col gap-2 p-3 rounded-xl bg-white/5 border border-white/5 md:bg-transparent md:border-none md:p-0 md:flex-row md:items-center md:space-x-4 animate-fade-in">
-              <input 
-                type="text" 
-                className="w-full md:w-1/3 bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:border-blue-500/50 outline-none" 
-                value={link.platform} 
-                onChange={(e) => updateLink(link.id, 'platform', e.target.value)}
-                placeholder="Platform"
-              />
-              <input 
-                type="url" 
-                className="w-full flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:border-blue-500/50 outline-none" 
-                value={link.url} 
-                onChange={(e) => updateLink(link.id, 'url', e.target.value)}
-                placeholder="URL"
-              />
-              <button 
-                onClick={() => {
-                  const newLinks = (profile.links || []).filter((l: any) => l.id !== link.id);
-                  setProfile((prev: any) => ({ ...prev, links: newLinks }));
-                }}
-                className="text-xs text-red-400/60 hover:text-red-400 p-1 self-end md:self-auto transition-colors"
-              >
-                Remove
-              </button>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={linkIds} strategy={verticalListSortingStrategy}>
+            <div className="space-y-3">
+              {(profile.links || []).map((link: any) => (
+                <SortableLinkItem 
+                  key={link.id} 
+                  link={link} 
+                  updateLink={updateLink} 
+                  removeLink={removeLink} 
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
+
         <button 
           onClick={addLink}
           className="text-sm text-blue-400 hover:text-blue-300 font-medium flex items-center gap-2 p-2"
