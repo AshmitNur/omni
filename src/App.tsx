@@ -64,6 +64,7 @@ function AnimatedRoutes() {
         <Route path="/" element={<PageWrapper><Home /></PageWrapper>} />
         <Route path="/login" element={<PageWrapper><Login /></PageWrapper>} />
         <Route path="/register" element={<PageWrapper><Register /></PageWrapper>} />
+        <Route path="/activate" element={<PageWrapper><Register /></PageWrapper>} />
         <Route path="/editor/*" element={
           <ProtectedRoute>
             <PageWrapper>

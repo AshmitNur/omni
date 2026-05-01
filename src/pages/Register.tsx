@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, User, AlertCircle, Key } from 'lucide-react';
 import MagicButton from '../components/MagicButton';
 import { GlowCard } from '../components/ui/spotlight-card';
@@ -8,16 +8,19 @@ import { useAuth } from '../context/AuthContext';
 
 export default function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { refreshUser } = useAuth();
+  
+  const urlCode = searchParams.get('code');
   
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationCode, setVerificationCode] = useState(urlCode || '');
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<'signup' | 'verify'>('signup');
+  const [step, setStep] = useState<'signup' | 'verify' | 'url_activation'>(urlCode ? 'url_activation' : 'signup');
 
   const handleRequestSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +48,14 @@ export default function Register() {
       const lastName = parts.slice(1).join(' ') || '';
 
       await activateAccount(firstName, lastName, password, verificationCode);
+      
+      // If we are coming from a URL activation, we don't know the email to auto-login.
+      // So we navigate them to the login screen to manually log in with their new credentials.
+      if (step === 'url_activation' && !email) {
+        navigate('/login', { state: { message: 'Account activated successfully! Please log in.' } });
+        return;
+      }
+
       await loginWithPassword(email, password);
       await refreshUser();
       navigate('/editor');
@@ -68,7 +79,7 @@ export default function Register() {
             <h1 className="text-3xl font-display font-black tracking-[0.2em] text-white">OMNI</h1>
           </Link>
           <p className="text-xs font-medium tracking-[0.3em] text-white/30 uppercase mt-2">
-            {step === 'signup' ? 'Join the Engine' : 'Verify Email'}
+            {step === 'signup' ? 'Join the Engine' : step === 'url_activation' ? 'Complete Profile' : 'Verify Email'}
           </p>
         </div>
 
@@ -141,6 +152,58 @@ export default function Register() {
               </p>
             </div>
           </>
+        ) : step === 'url_activation' ? (
+          <form onSubmit={handleActivateAccount} className="space-y-5">
+            {error && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2 text-xs text-red-400 animate-shake">
+                <AlertCircle className="w-4 h-4" />
+                {error}
+              </div>
+            )}
+            
+            <div className="text-center mb-6">
+              <p className="text-sm text-[var(--color-chrome-dark)]">
+                Email verified! Please set up your profile to continue.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-label block">Full Name</label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--color-chrome-dark)]" />
+                <input 
+                  type="text" 
+                  className="input-field pl-12" 
+                  placeholder="Jane Doe"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-label block">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--color-chrome-dark)]" />
+                <input 
+                  type="password" 
+                  className="input-field pl-12" 
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 mt-4">
+              <MagicButton type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Activating...' : 'Complete Profile'}
+              </MagicButton>
+            </div>
+          </form>
         ) : (
           <form onSubmit={handleActivateAccount} className="space-y-5">
             {error && (
@@ -191,3 +254,4 @@ export default function Register() {
     </div>
   );
 }
+

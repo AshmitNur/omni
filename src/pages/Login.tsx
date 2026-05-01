@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
 import MagicButton from '../components/MagicButton';
 import { GlowCard } from '../components/ui/spotlight-card';
@@ -8,10 +8,12 @@ import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { refreshUser } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState(location.state?.message || '');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -51,6 +53,11 @@ export default function Login() {
             <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2 text-xs text-red-400 animate-shake">
               <AlertCircle className="w-4 h-4" />
               {error}
+            </div>
+          )}
+          {successMessage && (
+            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center gap-2 text-xs text-green-400">
+              {successMessage}
             </div>
           )}
           <div className="space-y-1.5">
