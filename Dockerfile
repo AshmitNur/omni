@@ -14,7 +14,6 @@ ENV VITE_PROJECT_SLUG=$VITE_PROJECT_SLUG
 
 # Copy package files
 COPY package*.json ./
-COPY webapp/package*.json ./webapp/
 
 # Install dependencies
 RUN npm install
@@ -29,8 +28,8 @@ RUN npm run build
 FROM nginx:alpine
 # Add custom Nginx configuration to support React Router SPA fallback
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-# Copy the built assets from the webapp/dist folder
-COPY --from=build /app/webapp/dist /usr/share/nginx/html
+# Copy the built assets from the dist folder
+COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
