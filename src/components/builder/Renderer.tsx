@@ -94,19 +94,25 @@ export function RenderComponent({ data, isEditor }: { data: VibeComponentData, i
 
     case 'links':
       return (
-        <div className="w-full p-6 max-w-lg mx-auto flex flex-col gap-3">
+        <div className="w-full p-6 max-w-lg mx-auto flex flex-col gap-4">
           {props.links && props.links.map((link: any, i: number) => (
             <a 
               key={i} 
               href={link.url} 
               target="_blank" 
               rel="noreferrer"
-              className="flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl transition-all"
+              className="group relative flex items-center justify-between px-6 py-4 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all duration-500 overflow-hidden shadow-[0_4px_24px_-8px_rgba(0,0,0,0.5)] hover:shadow-[0_4px_24px_-8px_rgba(255,255,255,0.1)]"
             >
-              <span className="text-sm font-medium text-white">{link.platform}</span>
-              <svg className="w-4 h-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+              {/* Subtle hover gradient background */}
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-white/5 to-purple-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              
+              <span className="relative z-10 text-sm font-semibold tracking-wide text-white/90 group-hover:text-white transition-colors">{link.platform}</span>
+              
+              <div className="relative z-10 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center group-hover:bg-white/20 group-hover:scale-110 transition-all duration-300">
+                <svg className="w-3.5 h-3.5 text-white/70 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </div>
             </a>
           ))}
         </div>
