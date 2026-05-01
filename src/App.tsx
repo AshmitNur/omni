@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import EditorDashboard from './pages/EditorDashboard';
+import Preview from './pages/Preview';
 import PublicProfile from './pages/PublicProfile';
 import NotFound from './pages/NotFound';
 import { WebGLShader } from './components/ui/web-gl-shader';
@@ -72,6 +73,7 @@ function AnimatedRoutes() {
             </PageWrapper>
           </ProtectedRoute>
         } />
+        <Route path="/preview" element={<PageWrapper><Preview /></PageWrapper>} />
         <Route path="/profile/:username" element={<PageWrapper><PublicProfile /></PageWrapper>} />
         <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
       </Routes>
