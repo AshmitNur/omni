@@ -210,7 +210,7 @@ export default function EditorDashboard() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen relative z-10 bg-[#050505]">
+    <div className="flex flex-col min-h-screen relative z-10">
       {/* Top Navigation */}
       <nav className="h-[60px] fixed top-0 w-full z-50 flex items-center justify-between px-6 bg-[#0D0F12]/80 backdrop-blur-md border-b border-white/5">
         <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -247,7 +247,7 @@ export default function EditorDashboard() {
       <div className="flex flex-1 pt-[60px] h-screen overflow-hidden relative">
         
         {/* Left Sidebar (Pages & Components) */}
-        <div className="w-[260px] hidden md:flex flex-col h-full shrink-0 bg-[#0A0A0A] border-r border-white/5 z-20 shadow-2xl">
+        <div className="w-[260px] hidden md:flex flex-col h-full shrink-0 bg-black/40 backdrop-blur-xl border-r border-white/5 z-20 shadow-2xl">
           {/* Tabs */}
           <div className="flex p-2 border-b border-white/5">
             <button 
@@ -316,7 +316,7 @@ export default function EditorDashboard() {
         </div>
 
         {/* Main Canvas Area */}
-        <div className="flex-1 h-full overflow-y-auto bg-[#111111] relative" onClick={() => setSelectedComponentId(null)}>
+        <div className="flex-1 h-full overflow-y-auto relative" onClick={() => setSelectedComponentId(null)}>
           <div className="max-w-5xl mx-auto py-12 px-4 md:px-12 min-h-full flex flex-col">
             {activePage ? (
               <div className="flex-1 bg-black/40 border border-white/5 rounded-2xl shadow-2xl p-4 md:p-8 min-h-[800px]">
@@ -359,7 +359,7 @@ export default function EditorDashboard() {
         </div>
 
         {/* Right Properties Panel */}
-        <div className="w-[300px] hidden lg:flex flex-col h-full shrink-0 bg-[#0A0A0A] border-l border-white/5 z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
+        <div className="w-[300px] hidden lg:flex flex-col h-full shrink-0 bg-black/40 backdrop-blur-xl border-l border-white/5 z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
           <div className="p-4 border-b border-white/5 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-white">Properties</h2>
             {selectedComponentId && (
