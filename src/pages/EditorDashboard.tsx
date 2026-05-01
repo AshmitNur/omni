@@ -18,16 +18,17 @@ export default function EditorDashboard() {
   const [profile, setProfile] = useState(() => {
     const storageKey = user ? `omni-profile-${user.itemId}` : 'omni-profile-guest';
     const saved = localStorage.getItem(storageKey);
+    const defaultUsername = user?.userName || user?.email?.split('@')[0] || 'user';
     const defaultData = {
-      displayName: user?.displayName || user?.firstName || 'Avery Stone',
-      username: user?.userName || user?.email?.split('@')[0] || 'ashmitnur',
+      displayName: user?.displayName || user?.firstName || 'New User',
+      username: defaultUsername,
       headline: 'Product-minded developer',
       bio: '',
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100',
       banner: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=600&q=80',
       links: [
-        { id: 1, platform: 'LinkedIn', url: 'https://linkedin.com/in/ashmitnur' },
-        { id: 2, platform: 'GitHub', url: 'https://github.com/ashmitnur' }
+        { id: 1, platform: 'LinkedIn', url: `https://linkedin.com/in/${defaultUsername}` },
+        { id: 2, platform: 'GitHub', url: `https://github.com/${defaultUsername}` }
       ]
     };
 
