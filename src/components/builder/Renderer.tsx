@@ -40,11 +40,12 @@ export function RenderComponent({ data, isEditor }: { data: VibeComponentData, i
         <div className={clsx(
           "w-full p-6",
           props.alignment === 'center' ? 'text-center' : props.alignment === 'right' ? 'text-right' : 'text-left',
-          props.fontSize === 'large' ? 'text-xl' : props.fontSize === 'small' ? 'text-sm' : 'text-base',
+          props.fontSize === 'large' ? 'text-xl md:text-2xl' : props.fontSize === 'small' ? 'text-sm' : 'text-base',
+          props.fontFamily === 'serif' ? 'font-serif' : props.fontFamily === 'mono' ? 'font-mono' : props.fontFamily === 'display' ? 'font-display tracking-tight' : 'font-sans',
           "text-white/80"
         )}>
           {props.content.split('\n').map((line: string, i: number) => (
-            <p key={i} className="mb-2 last:mb-0">{line}</p>
+            <p key={i} className="mb-2 last:mb-0 min-h-[1em]">{line}</p>
           ))}
         </div>
       );
@@ -88,6 +89,26 @@ export function RenderComponent({ data, isEditor }: { data: VibeComponentData, i
               </button>
             </form>
           </div>
+        </div>
+      );
+
+    case 'links':
+      return (
+        <div className="w-full p-6 max-w-lg mx-auto flex flex-col gap-3">
+          {props.links && props.links.map((link: any, i: number) => (
+            <a 
+              key={i} 
+              href={link.url} 
+              target="_blank" 
+              rel="noreferrer"
+              className="flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl transition-all"
+            >
+              <span className="text-sm font-medium text-white">{link.platform}</span>
+              <svg className="w-4 h-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </a>
+          ))}
         </div>
       );
 

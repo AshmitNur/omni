@@ -1,7 +1,6 @@
-import React from 'react';
-import { Type, Image as ImageIcon, Send, LayoutTemplate } from 'lucide-react';
+import { Type, Image as ImageIcon, Send, LayoutTemplate, Link2 } from 'lucide-react';
 
-export type ComponentType = 'hero' | 'text' | 'gallery' | 'contact';
+export type ComponentType = 'hero' | 'text' | 'gallery' | 'contact' | 'links';
 
 export interface VibeComponentData {
   id: string;
@@ -28,6 +27,7 @@ export const COMPONENT_REGISTRY = {
       content: 'This is a text block. You can edit this text in the properties panel to say whatever you want.',
       fontSize: 'base',
       alignment: 'left',
+      fontFamily: 'sans',
     }
   },
   gallery: {
@@ -49,6 +49,16 @@ export const COMPONENT_REGISTRY = {
       title: 'Contact Us',
       buttonText: 'Send Message',
       emailRecipient: 'test@example.com'
+    }
+  },
+  links: {
+    name: 'Social Links',
+    icon: Link2,
+    defaultProps: {
+      links: [
+        { id: 1, platform: 'Website', url: 'https://' },
+        { id: 2, platform: 'Twitter', url: 'https://twitter.com/' }
+      ]
     }
   }
 };

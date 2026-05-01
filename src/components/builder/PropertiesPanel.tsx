@@ -38,6 +38,7 @@ export function PropertiesPanel({ component, updateComponent }: PropertiesPanelP
           <>
             <TextAreaField label="Content" value={props.content} onChange={(v) => handlePropChange('content', v)} />
             <SelectField label="Font Size" value={props.fontSize} options={['small', 'base', 'large']} onChange={(v) => handlePropChange('fontSize', v)} />
+            <SelectField label="Font Family" value={props.fontFamily} options={['sans', 'serif', 'mono', 'display']} onChange={(v) => handlePropChange('fontFamily', v)} />
             <SelectField label="Alignment" value={props.alignment} options={['left', 'center', 'right']} onChange={(v) => handlePropChange('alignment', v)} />
           </>
         );
@@ -87,6 +88,61 @@ export function PropertiesPanel({ component, updateComponent }: PropertiesPanelP
             <InputField label="Title" value={props.title} onChange={(v) => handlePropChange('title', v)} />
             <InputField label="Button Text" value={props.buttonText} onChange={(v) => handlePropChange('buttonText', v)} />
             <InputField label="Recipient Email" value={props.emailRecipient} onChange={(v) => handlePropChange('emailRecipient', v)} type="email" />
+          </>
+        );
+      case 'links':
+        return (
+          <>
+            <div className="space-y-3 mt-4">
+              <label className="text-xs font-medium text-white/60 uppercase">Links</label>
+              {(props.links || []).map((link: any, idx: number) => (
+                <div key={idx} className="flex flex-col gap-2 p-3 bg-white/5 border border-white/10 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-white/40 uppercase font-medium">Link {idx + 1}</span>
+                    <button 
+                      className="text-[10px] text-red-400 hover:text-red-300 transition-colors"
+                      onClick={() => {
+                        const newLinks = props.links.filter((_: any, i: number) => i !== idx);
+                        handlePropChange('links', newLinks);
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <input 
+                    type="text" 
+                    value={link.platform} 
+                    placeholder="Platform (e.g. Website)"
+                    onChange={(e) => {
+                      const newLinks = [...props.links];
+                      newLinks[idx] = { ...newLinks[idx], platform: e.target.value };
+                      handlePropChange('links', newLinks);
+                    }}
+                    className="w-full bg-black/40 border border-white/10 rounded px-2 py-1.5 text-xs text-white"
+                  />
+                  <input 
+                    type="url" 
+                    value={link.url} 
+                    placeholder="https://"
+                    onChange={(e) => {
+                      const newLinks = [...props.links];
+                      newLinks[idx] = { ...newLinks[idx], url: e.target.value };
+                      handlePropChange('links', newLinks);
+                    }}
+                    className="w-full bg-black/40 border border-white/10 rounded px-2 py-1.5 text-xs text-white"
+                  />
+                </div>
+              ))}
+              <button 
+                className="w-full py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-medium transition-colors mt-2"
+                onClick={() => {
+                  const newId = props.links && props.links.length > 0 ? Math.max(...props.links.map((l:any)=>l.id)) + 1 : 1;
+                  handlePropChange('links', [...(props.links || []), { id: newId, platform: 'New Link', url: 'https://' }]);
+                }}
+              >
+                + Add Another Link
+              </button>
+            </div>
           </>
         );
       default:
