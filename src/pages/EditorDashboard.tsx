@@ -107,17 +107,36 @@ export default function EditorDashboard() {
 
   // Initial Data Load
   useEffect(() => {
+    // Reset ALL editor state when user changes to prevent cross-user leaks
+    setSiteData(null);
+    setActivePageId('');
+    setSelectedComponentId(null);
+    setSaveStatus('saved');
+    setSaveError('');
+    setIsDataLoading(true);
+
     const loadData = async () => {
+      // If we are currently signing out or have no user, show loading or guest mode
       if (!user) {
         // Guest mode fallback
-        const saved = getLocalSiteData('guest');
-        setSiteData(saved ? { ...defaultData, ...saved } : defaultData);
+        try {
+          const saved = getLocalSiteData('guest');
+          setSiteData(saved ? { ...defaultData, ...saved } : defaultData);
+        } catch (err) {
+          setSiteData(defaultData);
+        }
         setIsDataLoading(false);
         return;
       }
 
       try {
         const preferredUsername = getPreferredUsername(user);
+        
+        // Safety guard: ensure user.itemId exists
+        if (!user.itemId) {
+          throw new Error("User ID missing from session");
+        }
+
         const content = await ensureSiteContent(user.itemId, preferredUsername, defaultData);
         if (content && content.data) {
           setSiteData(normalizeSiteData({ ...defaultData, ...content.data }, preferredUsername));
@@ -130,7 +149,7 @@ export default function EditorDashboard() {
         }
       } catch (err) {
         console.error("Failed to load site data from API, using local cache", err);
-        const local = getLocalSiteData(user.itemId);
+        const local = user?.itemId ? getLocalSiteData(user.itemId) : null;
         setSiteData(local ? normalizeSiteData({ ...defaultData, ...local }, getPreferredUsername(user)) : normalizeSiteData(defaultData, getPreferredUsername(user)));
       } finally {
         setIsDataLoading(false);

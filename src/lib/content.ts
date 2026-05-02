@@ -393,6 +393,7 @@ function normalizeInventorySiteRecord(record: unknown): VibeSiteContent | null {
 }
 
 async function getInventorySiteByOwner(ownerId: string): Promise<VibeSiteContent | null> {
+  if (!ownerId) return null;
   type Response = {
     getInventoryItems?: {
       items?: unknown[];
@@ -476,6 +477,7 @@ async function upsertInventorySiteContent(
   username: string,
   siteData: Partial<VibeSiteData>
 ): Promise<VibeSiteContent> {
+  if (!ownerId) throw new Error("Owner ID is required for persistence");
   type InsertResponse = {
     insertInventoryItem?: {
       itemId?: string;
@@ -578,6 +580,7 @@ export async function upsertSiteContent(
 }
 
 export async function getSiteContentByOwner(ownerId: string): Promise<VibeSiteContent | null> {
+  if (!ownerId) return null;
   try {
     const inventoryRecord = await getInventorySiteByOwner(ownerId);
     if (inventoryRecord) return inventoryRecord;
@@ -655,6 +658,7 @@ export async function ensureSiteContent(
 }
 
 export function getLocalSiteData(userId: string): VibeSiteData | null {
+  if (!userId) return null;
   const key = `vibe-site-${userId}`;
   const raw = localStorage.getItem(key);
   if (!raw) return null;
@@ -666,6 +670,7 @@ export function getLocalSiteData(userId: string): VibeSiteData | null {
 }
 
 export function setLocalSiteData(userId: string, data: Partial<VibeSiteData>): void {
+  if (!userId) return;
   const key = `vibe-site-${userId}`;
   localStorage.setItem(key, JSON.stringify(normalizeSiteData(data)));
 }

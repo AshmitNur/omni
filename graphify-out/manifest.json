@@ -1,0 +1,154 @@
+{
+  "D:\\NSU Matterials\\CSE 226\\UPE\\eslint.config.js": {
+    "mtime": 1776925102.5863793,
+    "hash": "0355276bc79439afe3c53e3a2470ca1e"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\parse-pdf.js": {
+    "mtime": 1777627593.8683734,
+    "hash": "9ac1d665437cb457a8ed7e93185b5a62"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\vite.config.ts": {
+    "mtime": 1776926115.9438298,
+    "hash": "bd4de4aa3116187e85a111fd7ea132af"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\App.tsx": {
+    "mtime": 1777719449.3452907,
+    "hash": "c52acd74fe4ecd1708796570698ef305"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\main.tsx": {
+    "mtime": 1776931082.7409158,
+    "hash": "a3150907ddf2842367caa98e12a33298"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\components\\EtherealBackground.tsx": {
+    "mtime": 1776925836.1306906,
+    "hash": "4e302a91c8f17925984501e912335528"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\components\\Icons.tsx": {
+    "mtime": 1776925899.2071557,
+    "hash": "83f15ce46c3a807b20b76b522a210a33"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\components\\MagicButton.tsx": {
+    "mtime": 1776930261.0754051,
+    "hash": "fe98e292d82eebbc5ccee0f857d60492"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\components\\SplineBackground.tsx": {
+    "mtime": 1776925284.9661205,
+    "hash": "e54243b0650667155ff74f7c38fe1394"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\components\\builder\\PropertiesPanel.tsx": {
+    "mtime": 1777719458.248464,
+    "hash": "0296d12c2a41208691fc9da076ebb9ad"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\components\\builder\\registry.tsx": {
+    "mtime": 1777628937.7016628,
+    "hash": "2bc351fb33fc1778139b1401af7c07b4"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\components\\builder\\Renderer.tsx": {
+    "mtime": 1777629313.6114664,
+    "hash": "e33d80127a3a9287c2cea07e58549c95"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\components\\ui\\liquid-glass-button.tsx": {
+    "mtime": 1776926155.8235118,
+    "hash": "83b5c5209a426513d76a46287c5fdb97"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\components\\ui\\spotlight-card.tsx": {
+    "mtime": 1776933825.094959,
+    "hash": "e988870d1f65c182d532f1fac183a205"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\components\\ui\\web-gl-shader.tsx": {
+    "mtime": 1776934754.9883115,
+    "hash": "e58b9985ddaa80dfe465ac09bdef4a87"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\context\\AuthContext.tsx": {
+    "mtime": 1777568839.0712166,
+    "hash": "534c912a3c0561c5267623b558f496ca"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\lib\\blocks.ts": {
+    "mtime": 1777720234.8035872,
+    "hash": "e31cde69d0361372b88415b0012a58ff"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\lib\\content.ts": {
+    "mtime": 1777731217.308375,
+    "hash": "4523032f446cebee3816256c48c07eb0"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\lib\\media.ts": {
+    "mtime": 1777726524.3484163,
+    "hash": "00c7c1c13645f9982b5039fb91dcfd86"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\lib\\utils.ts": {
+    "mtime": 1776926124.924381,
+    "hash": "ea1c194ee828369e6fcdde84b4d8b8ba"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\pages\\EditorDashboard.tsx": {
+    "mtime": 1777731208.1976147,
+    "hash": "ae8abcfdfb73bd5cde6169efa04904d9"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\pages\\Home.tsx": {
+    "mtime": 1776934273.3857162,
+    "hash": "68a500ef59339c3f0d4ace3288ec201e"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\pages\\Login.tsx": {
+    "mtime": 1777627026.9129913,
+    "hash": "000aa0b8a6cd114e4283c9e1e02620ff"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\pages\\NotFound.tsx": {
+    "mtime": 1777568149.672825,
+    "hash": "1b1c773256f301c4e1fca3f39d71f331"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\pages\\Preview.tsx": {
+    "mtime": 1777719453.9312918,
+    "hash": "d72efc9e0480a834b2ad7fa1e2460d8b"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\pages\\PublicSite.tsx": {
+    "mtime": 1777719442.8552134,
+    "hash": "2dac2f3919e2ddac611dc2df251b979d"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\pages\\Register.tsx": {
+    "mtime": 1777626979.928288,
+    "hash": "6a5e7311e5c341094cc9def2981fb3ca"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\Design.md": {
+    "mtime": 1776821876.0,
+    "hash": "3057a5fc181fc442b6076c0fda0e2bbe"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\index.html": {
+    "mtime": 1776926663.2064545,
+    "hash": "9f3f363b480a8cd0aea69168e5ed8ca2"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\pdf_content.txt": {
+    "mtime": 1777627603.2216666,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\PRD.md": {
+    "mtime": 1776821876.0,
+    "hash": "ce2872faed3e4cbf341fd0bb0baf8868"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\README.md": {
+    "mtime": 1776925102.6343043,
+    "hash": "f6e3faf55d738cf2affe1b44195f27cf"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\Selise Blocks Project Brief_2.pdf": {
+    "mtime": 1777567905.995952,
+    "hash": "eefb7d13a5c01fa8312886af242a66db"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\public\\favicon.svg": {
+    "mtime": 1776925102.67592,
+    "hash": "7e840862161341271697daa99a40d76b"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\public\\icons.svg": {
+    "mtime": 1776925102.6866782,
+    "hash": "3b4fcfcf393eca4d264dca4a4663bc37"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\assets\\hero.png": {
+    "mtime": 1776925102.6544337,
+    "hash": "aead493361b27e7510691c5d7072dfc1"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\assets\\react.svg": {
+    "mtime": 1776925102.706479,
+    "hash": "f0402b67b6ce880f65666bb49e841696"
+  },
+  "D:\\NSU Matterials\\CSE 226\\UPE\\src\\assets\\vite.svg": {
+    "mtime": 1776925102.7205882,
+    "hash": "9960a24288958394ac50e57ff638b036"
+  }
+}
