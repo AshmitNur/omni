@@ -10,8 +10,8 @@ import cors from "cors";
 dotenv.config();
 
 const API_BASE = process.env.VITE_BLOCKS_API_URL || "https://api.seliseblocks.com";
-const X_BLOCKS_KEY = process.env.VITE_X_BLOCKS_KEY || "";
-const PROJECT_SLUG = process.env.VITE_PROJECT_SLUG || "";
+const X_BLOCKS_KEY = process.env.VITE_X_BLOCKS_KEY || "f44b9e7d-7c65-4783-a360-14a7df36674e";
+const PROJECT_SLUG = process.env.VITE_PROJECT_SLUG || "dryzkn";
 
 const server = new McpServer({
   name: "Selise OMNI Manager",
