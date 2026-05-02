@@ -300,6 +300,42 @@ export async function uploadMedia(
   assertSupportedImage(file);
   onProgress?.(0);
 
+  // Strategy 0: Use MCP Proxy to bypass CORS
+  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
+  if (proxyUrl) {
+    try {
+      console.log('[Media] Attempting upload via MCP Proxy...');
+      const dataUrl = await fileToDataUrl(file);
+      const res = await fetch(`${proxyUrl}/proxy/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          base64: dataUrl.split(',')[1],
+          fileName: file.name,
+          mimeType: file.type,
+          bucketName: 'omni-media'
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log('[Media] Proxy upload successful:', data);
+        const fileId = data.fileId || data.ItemId || data.id || data.data?.itemId;
+        onProgress?.(100);
+        return {
+          url: data.url || `${API_BASE}/media/v1/File/${fileId}`,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type,
+          itemId: fileId,
+        };
+      }
+      console.warn('[Media] Proxy upload failed, falling back to direct...');
+    } catch (err) {
+      console.error('[Media] Proxy error:', err);
+    }
+  }
+
   try {
     const preSigned = await getPreSignedUrl(file);
     if (!preSigned.isSuccess || !preSigned.uploadUrl) {
