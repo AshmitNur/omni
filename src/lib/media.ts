@@ -12,7 +12,10 @@ import { getAccessToken } from './blocks';
 const API_BASE = import.meta.env.VITE_BLOCKS_API_URL || 'https://api.seliseblocks.com';
 const X_BLOCKS_KEY = import.meta.env.VITE_X_BLOCKS_KEY || '';
 const STORAGE_CONFIGURATION = import.meta.env.VITE_BLOCKS_STORAGE_CONFIGURATION || 'Default';
-const STORAGE_MODULE_NAME = Number(import.meta.env.VITE_BLOCKS_STORAGE_MODULE_NAME || 8);
+const STORAGE_MODULE_NAMES = String(import.meta.env.VITE_BLOCKS_STORAGE_MODULE_NAMES || '8,10,2')
+  .split(',')
+  .map((value) => Number(value.trim()))
+  .filter((value) => Number.isFinite(value));
 const MAX_IMAGE_SIZE_BYTES = Number(import.meta.env.VITE_MAX_IMAGE_UPLOAD_BYTES || 5 * 1024 * 1024);
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -79,7 +82,7 @@ function getResponseErrorMessage(data: any, fallback: string) {
   return fallback;
 }
 
-async function getPreSignedUrl(file: File, folder: string): Promise<PreSignedUploadResponse> {
+async function requestPreSignedUrl(file: File, moduleName: number): Promise<PreSignedUploadResponse> {
   const payload = {
     name: file.name,
     projectKey: X_BLOCKS_KEY,
@@ -89,7 +92,7 @@ async function getPreSignedUrl(file: File, folder: string): Promise<PreSignedUpl
     configurationName: STORAGE_CONFIGURATION,
     parentDirectoryId: '',
     tags: '',
-    moduleName: STORAGE_MODULE_NAME,
+    moduleName,
   };
 
   const res = await fetch(`${API_BASE}/uds/v1/Files/GetPreSignedUrlForUpload`, {
@@ -100,10 +103,28 @@ async function getPreSignedUrl(file: File, folder: string): Promise<PreSignedUpl
 
   const data = await parseErrorResponse(res);
   if (!res.ok) {
-    throw new Error(getResponseErrorMessage(data, `Pre-signed upload URL failed (${res.status})`));
+    throw new Error(getResponseErrorMessage(data, `moduleName ${moduleName} failed (${res.status})`));
   }
 
   return data as PreSignedUploadResponse;
+}
+
+async function getPreSignedUrl(file: File): Promise<PreSignedUploadResponse> {
+  const errors: string[] = [];
+
+  for (const moduleName of STORAGE_MODULE_NAMES) {
+    try {
+      const data = await requestPreSignedUrl(file, moduleName);
+      if (data.isSuccess && data.uploadUrl) return data;
+
+      const details = data.errors ? Object.values(data.errors).join(' ') : 'No upload URL returned';
+      errors.push(`moduleName ${moduleName}: ${details}`);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : `moduleName ${moduleName} failed`);
+    }
+  }
+
+  throw new Error(`Pre-signed upload URL failed. ${errors.join(' | ')}`);
 }
 
 function uploadToSignedUrl(
@@ -183,7 +204,7 @@ export async function uploadMedia(
   onProgress?.(0);
 
   try {
-    const preSigned = await getPreSignedUrl(file, folder);
+    const preSigned = await getPreSignedUrl(file);
     if (!preSigned.isSuccess || !preSigned.uploadUrl) {
       const details = preSigned.errors ? Object.values(preSigned.errors).join(' ') : '';
       throw new Error(details || 'Pre-signed upload URL was not returned.');
