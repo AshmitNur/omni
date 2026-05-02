@@ -7,7 +7,7 @@
  */
 
 import type { VibeComponentData } from '../components/builder/registry';
-import { getAccessToken } from './blocks';
+import { getAccessToken, refreshAccessToken } from './blocks';
 
 const API_BASE = import.meta.env.VITE_BLOCKS_API_URL || 'https://api.seliseblocks.com';
 const X_BLOCKS_KEY = import.meta.env.VITE_X_BLOCKS_KEY || '';
@@ -115,6 +115,18 @@ function createContentError(prefix: string, status: number, error: unknown) {
   return new Error(detail ? `${prefix}: ${detail}` : `${prefix} (${status})`);
 }
 
+function isAuthError(error: unknown) {
+  if (!isRecord(error)) return false;
+  const errors = Array.isArray(error.errors) ? error.errors : [];
+  const messages = errors
+    .filter(isRecord)
+    .map((item) => `${readString(item, ['message']) || ''} ${readString(readRecord(item, ['extensions']) || {}, ['code']) || ''}`);
+  const directMessage = readString(error, ['message', 'error', 'error_description']) || '';
+  return [...messages, directMessage].some((message) =>
+    /unauthenticated|unauthorized|AUTH_NOT_AUTHENTICATED|invalid_token/i.test(message)
+  );
+}
+
 async function parseResponse(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return null;
@@ -128,7 +140,8 @@ async function parseResponse(res: Response): Promise<unknown> {
 async function postContent(
   action: string,
   payload: Record<string, unknown>,
-  includeAuth = true
+  includeAuth = true,
+  retryAuth = true
 ): Promise<unknown | null> {
   const res = await fetch(`${CONTENT_API_BASE}/${action}`, {
     method: 'POST',
@@ -138,6 +151,10 @@ async function postContent(
   });
 
   const data = await parseResponse(res);
+  if (includeAuth && retryAuth && (res.status === 401 || isAuthError(data))) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return postContent(action, payload, includeAuth, false);
+  }
   if (res.status === 404) return null;
   if (!res.ok) {
     throw createContentError(`Content ${action} failed`, res.status, data);
@@ -149,7 +166,8 @@ async function postContent(
 async function postGraphql<T>(
   query: string,
   variables: Record<string, unknown> = {},
-  includeAuth = true
+  includeAuth = true,
+  retryAuth = true
 ): Promise<T> {
   const res = await fetch(GRAPHQL_API_BASE, {
     method: 'POST',
@@ -159,6 +177,10 @@ async function postGraphql<T>(
   });
 
   const data = await parseResponse(res);
+  if (includeAuth && retryAuth && (res.status === 401 || isAuthError(data))) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return postGraphql<T>(query, variables, includeAuth, false);
+  }
   if (!res.ok) {
     throw createContentError('Data Gateway request failed', res.status, data);
   }
