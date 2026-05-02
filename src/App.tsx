@@ -4,7 +4,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import EditorDashboard from './pages/EditorDashboard';
 import Preview from './pages/Preview';
-import PublicProfile from './pages/PublicProfile';
+import PublicSite from './pages/PublicSite';
 import NotFound from './pages/NotFound';
 import { WebGLShader } from './components/ui/web-gl-shader';
 import Home from './pages/Home';
@@ -74,7 +74,8 @@ function AnimatedRoutes() {
           </ProtectedRoute>
         } />
         <Route path="/preview" element={<PageWrapper><Preview /></PageWrapper>} />
-        <Route path="/profile/:username" element={<PageWrapper><PublicProfile /></PageWrapper>} />
+        <Route path="/site/:username" element={<PageWrapper><PublicSite /></PageWrapper>} />
+        <Route path="/site/:username/:slug" element={<PageWrapper><PublicSite /></PageWrapper>} />
         <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
       </Routes>
     </AnimatePresence>

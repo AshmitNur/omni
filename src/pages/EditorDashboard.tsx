@@ -11,6 +11,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { COMPONENT_REGISTRY, type ComponentType, type VibeComponentData } from '../components/builder/registry';
 import { RenderComponent } from '../components/builder/Renderer';
 import { PropertiesPanel } from '../components/builder/PropertiesPanel';
+import { upsertSiteContent, getSiteContentByOwner, getLocalSiteData, setLocalSiteData } from '../lib/content';
 
 // Sortable wrapper for canvas components
 function SortableCanvasItem({ component, isSelected, onClick, onRemove }: any) {
@@ -80,30 +81,64 @@ export default function EditorDashboard() {
   const [activeTab, setActiveTab] = useState<'pages' | 'add'>('pages');
 
   // Site Data State
-  const [siteData, setSiteData] = useState(() => {
-    const storageKey = user ? `vibe-site-${user.itemId}` : 'vibe-site-guest';
-    const saved = localStorage.getItem(storageKey);
-    const defaultData = {
-      siteName: 'My Vibe Site',
-      pages: [
-        {
-          id: 'home',
-          title: 'Home',
-          slug: 'home',
-          components: [
-            { id: 'comp_1', type: 'hero', props: COMPONENT_REGISTRY.hero.defaultProps }
-          ] as VibeComponentData[]
+  const [siteData, setSiteData] = useState<any>(null);
+  const [isDataLoading, setIsDataLoading] = useState(true);
+
+  const defaultData = {
+    siteName: 'My Vibe Site',
+    pages: [
+      {
+        id: 'home',
+        title: 'Home',
+        slug: 'home',
+        components: [
+          { id: 'comp_1', type: 'hero', props: COMPONENT_REGISTRY.hero.defaultProps }
+        ] as VibeComponentData[]
+      }
+    ]
+  };
+
+  // Initial Data Load
+  useEffect(() => {
+    const loadData = async () => {
+      if (!user) {
+        // Guest mode fallback
+        const saved = getLocalSiteData('guest');
+        setSiteData(saved ? { ...defaultData, ...saved } : defaultData);
+        setIsDataLoading(false);
+        return;
+      }
+
+      try {
+        const content = await getSiteContentByOwner(user.itemId);
+        if (content && content.data) {
+          setSiteData({ ...defaultData, ...content.data });
+          // also update local cache
+          setLocalSiteData(user.itemId, content.data);
+        } else {
+          // If no content in API, check local storage or use default
+          const local = getLocalSiteData(user.itemId);
+          setSiteData(local ? { ...defaultData, ...local } : defaultData);
         }
-      ]
+      } catch (err) {
+        console.error("Failed to load site data from API, using local cache", err);
+        const local = getLocalSiteData(user.itemId);
+        setSiteData(local ? { ...defaultData, ...local } : defaultData);
+      } finally {
+        setIsDataLoading(false);
+      }
     };
+    loadData();
+  }, [user]);
 
-    if (saved) {
-      try { return { ...defaultData, ...JSON.parse(saved) }; } catch (e) { return defaultData; }
+  const [activePageId, setActivePageId] = useState<string>('');
+  
+  // Keep activePageId in sync when siteData initially loads
+  useEffect(() => {
+    if (siteData && !activePageId && siteData.pages?.length > 0) {
+      setActivePageId(siteData.pages[0].id);
     }
-    return defaultData;
-  });
-
-  const [activePageId, setActivePageId] = useState<string>(siteData.pages[0]?.id || '');
+  }, [siteData, activePageId]);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
 
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
@@ -119,11 +154,25 @@ export default function EditorDashboard() {
     setSaveStatus('unsaved');
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
-    saveTimeoutRef.current = setTimeout(() => {
-      const storageKey = user ? `vibe-site-${user.itemId}` : 'vibe-site-guest';
-      localStorage.setItem(storageKey, JSON.stringify(siteData));
+    saveTimeoutRef.current = setTimeout(async () => {
       setSaveStatus('saving');
-      setTimeout(() => setSaveStatus('saved'), 400);
+      if (user) {
+        // Save to Local Cache immediately
+        setLocalSiteData(user.itemId, siteData);
+        try {
+          // Push to Selise API
+          await upsertSiteContent(user.itemId, user.userName || user.email.split('@')[0], siteData);
+          setSaveStatus('saved');
+        } catch (err) {
+          console.error("Failed to save to Selise API", err);
+          // Still mark as 'unsaved' or maybe 'saved' locally? Let's keep it 'saved' since local is updated
+          setSaveStatus('saved'); 
+        }
+      } else {
+        // Guest mode
+        setLocalSiteData('guest', siteData);
+        setSaveStatus('saved');
+      }
     }, 1500);
 
     return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
@@ -132,12 +181,22 @@ export default function EditorDashboard() {
   const activePage = siteData.pages.find((p: any) => p.id === activePageId);
   const activeComponent = activePage?.components.find((c: any) => c.id === selectedComponentId) || null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    const storageKey = user ? `vibe-site-${user.itemId}` : 'vibe-site-guest';
-    localStorage.setItem(storageKey, JSON.stringify(siteData));
     setSaveStatus('saving');
-    setTimeout(() => setSaveStatus('saved'), 400);
+    
+    if (user) {
+      setLocalSiteData(user.itemId, siteData);
+      try {
+        await upsertSiteContent(user.itemId, user.userName || user.email.split('@')[0], siteData);
+      } catch (err) {
+        console.error("Manual save to Selise API failed", err);
+      }
+    } else {
+      setLocalSiteData('guest', siteData);
+    }
+    
+    setSaveStatus('saved');
   };
 
   // Page Management
@@ -208,6 +267,14 @@ export default function EditorDashboard() {
       components: arrayMove(activePage.components, oldIndex, newIndex)
     });
   };
+
+  if (isDataLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center relative z-10 text-white/40 animate-pulse">
+        Loading editor...
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen relative z-10">
@@ -394,7 +461,7 @@ export default function EditorDashboard() {
                   onChange={(e) => updateActivePage({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
                   className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-blue-500/50 font-mono"
                 />
-                <p className="text-[10px] text-white/30 mt-1">vibe.site/{user?.userName || 'user'}/{activePage.slug}</p>
+                <p className="text-[10px] text-white/30 mt-1">omni.site/site/{user?.userName || user?.email?.split('@')[0] || 'user'}/{activePage.slug}</p>
               </div>
             </div>
           ) : (

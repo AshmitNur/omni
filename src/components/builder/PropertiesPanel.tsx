@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { VibeComponentData } from './registry';
+import { uploadMedia, fileToDataUrl } from '../../lib/media';
 
 interface PropertiesPanelProps {
   component: VibeComponentData | null;
@@ -46,22 +47,12 @@ export function PropertiesPanel({ component, updateComponent }: PropertiesPanelP
         return (
           <>
             <SelectField label="Columns" value={props.columns.toString()} options={['2', '3', '4']} onChange={(v) => handlePropChange('columns', parseInt(v))} />
-            <div className="space-y-3 mt-4">
+            <div className="space-y-4 mt-4">
               <label className="text-xs font-medium text-white/60 uppercase">Images</label>
               {props.images.map((img: string, idx: number) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <input 
-                    type="url" 
-                    value={img} 
-                    onChange={(e) => {
-                      const newImages = [...props.images];
-                      newImages[idx] = e.target.value;
-                      handlePropChange('images', newImages);
-                    }}
-                    className="flex-1 bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white"
-                  />
+                <div key={idx} className="relative p-3 bg-white/5 border border-white/10 rounded-lg">
                   <button 
-                    className="text-red-400 p-2 hover:bg-red-500/10 rounded"
+                    className="absolute top-2 right-2 text-red-400 p-1 hover:bg-red-500/10 rounded z-10"
                     onClick={() => {
                       const newImages = props.images.filter((_: any, i: number) => i !== idx);
                       handlePropChange('images', newImages);
@@ -69,15 +60,24 @@ export function PropertiesPanel({ component, updateComponent }: PropertiesPanelP
                   >
                     ×
                   </button>
+                  <ImageUploadField 
+                    label={`Image ${idx + 1}`} 
+                    value={img} 
+                    onChange={(v: string) => {
+                      const newImages = [...props.images];
+                      newImages[idx] = v;
+                      handlePropChange('images', newImages);
+                    }} 
+                  />
                 </div>
               ))}
               <button 
-                className="w-full py-2 bg-white/5 border border-white/10 border-dashed rounded text-xs text-white/80 hover:bg-white/10"
+                className="w-full py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-medium transition-colors"
                 onClick={() => {
                   handlePropChange('images', [...props.images, 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=400&q=80']);
                 }}
               >
-                + Add Image
+                + Add Image Slot
               </button>
             </div>
           </>
@@ -206,25 +206,46 @@ function SelectField({ label, value, options, onChange }: any) {
 }
 
 function ImageUploadField({ label, value, onChange }: any) {
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [isUploading, setIsUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        onChange(reader.result);
-      };
-      reader.readAsDataURL(file);
+      try {
+        setIsUploading(true);
+        setProgress(0);
+        // Instant local preview
+        const localPreview = await fileToDataUrl(file);
+        onChange(localPreview);
+
+        // Actual upload to Selise Media Block
+        const result = await uploadMedia(file, 'vibe-uploads', (p) => setProgress(p));
+        onChange(result.url);
+      } catch (err) {
+        console.error("Upload failed", err);
+        alert("Failed to upload image. Using local preview only.");
+      } finally {
+        setIsUploading(false);
+      }
     }
   };
 
   return (
     <div className="space-y-1.5 mb-4">
       <label className="text-[10px] font-medium text-white/60 uppercase">{label}</label>
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 relative">
         {value && <img src={value} alt="Preview" className="w-full h-24 object-cover rounded-lg border border-white/10" />}
-        <label className="w-full bg-white/5 hover:bg-white/10 border border-white/10 border-dashed rounded-lg p-2 text-center text-xs text-white/80 cursor-pointer transition-colors">
-          Upload Image
-          <input type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+        {isUploading && (
+          <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
+            <div className="w-3/4 bg-white/20 rounded-full h-1.5 overflow-hidden">
+              <div className="bg-blue-500 h-full transition-all duration-300" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        )}
+        <label className={`w-full bg-white/5 hover:bg-white/10 border border-white/10 border-dashed rounded-lg p-2 text-center text-xs transition-colors ${isUploading ? 'opacity-50 cursor-not-allowed text-white/40' : 'cursor-pointer text-white/80'}`}>
+          {isUploading ? 'Uploading...' : 'Upload Image'}
+          <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={isUploading} />
         </label>
         <div className="flex items-center gap-2">
           <span className="text-xs text-white/40">or URL:</span>
