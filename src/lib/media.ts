@@ -144,10 +144,6 @@ async function uploadViaLegacyEndpoint(
 
   const res = await fetch(uploadUrl.toString(), {
     method: 'POST',
-    headers: {
-      'x-blocks-key': X_BLOCKS_KEY,
-      ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
-    },
     body: formData,
   });
 
@@ -193,8 +189,16 @@ export async function uploadMedia(
       itemId: preSigned.fileId,
     };
   } catch (error) {
-    console.warn('Pre-signed Selise media upload failed, trying legacy upload endpoint.', error);
-    return uploadViaLegacyEndpoint(file, folder, onProgress);
+    const preSignedError = error instanceof Error ? error : new Error('Pre-signed upload failed');
+    console.warn('Pre-signed Selise media upload failed, trying legacy upload endpoint.', preSignedError);
+
+    try {
+      return await uploadViaLegacyEndpoint(file, folder, onProgress);
+    } catch (fallbackError) {
+      const fallbackMessage =
+        fallbackError instanceof Error ? fallbackError.message : 'Legacy upload endpoint failed';
+      throw new Error(`${preSignedError.message}. Fallback upload failed: ${fallbackMessage}`);
+    }
   }
 }
 
