@@ -5,7 +5,7 @@
  */
 
 const API_BASE = import.meta.env.VITE_BLOCKS_API_URL || 'https://api.seliseblocks.com';
-const X_BLOCKS_KEY = import.meta.env.VITE_X_BLOCKS_KEY || 'D1de684ebb36945139060d360429d2e53';
+const X_BLOCKS_KEY = import.meta.env.VITE_X_BLOCKS_KEY || 'f44b9e7d-7c65-4783-a360-14a7df36674e';
 
 // ─── Token storage keys ────────────────────────────────────────
 const ACCESS_TOKEN_KEY  = 'omni_access_token';

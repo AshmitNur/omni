@@ -10,8 +10,8 @@ import type { VibeComponentData } from '../components/builder/registry';
 import { getAccessToken, refreshAccessToken } from './blocks';
 
 const API_BASE = import.meta.env.VITE_BLOCKS_API_URL || 'https://api.seliseblocks.com';
-const X_BLOCKS_KEY = import.meta.env.VITE_X_BLOCKS_KEY || '';
-const PROJECT_SLUG = import.meta.env.VITE_PROJECT_SLUG || '';
+const X_BLOCKS_KEY = import.meta.env.VITE_X_BLOCKS_KEY || 'f44b9e7d-7c65-4783-a360-14a7df36674e';
+const PROJECT_SLUG = import.meta.env.VITE_PROJECT_SLUG || 'dryzkn';
 
 const CONTENT_TYPE = import.meta.env.VITE_CONTENT_TYPE || 'vibe_site';
 const CONTENT_API_BASE = (
