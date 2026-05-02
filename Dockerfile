@@ -4,14 +4,10 @@ WORKDIR /app
 
 # Declare build arguments so Selise Blocks can pass environment variables
 ARG VITE_BLOCKS_API_URL
-ARG VITE_X_BLOCKS_KEY
 ARG VITE_PROJECT_SLUG
-ARG VITE_MCP_PROXY_URL
 
 ENV VITE_BLOCKS_API_URL=${VITE_BLOCKS_API_URL:-https://api.seliseblocks.com}
-ENV VITE_X_BLOCKS_KEY=${VITE_X_BLOCKS_KEY}
 ENV VITE_PROJECT_SLUG=${VITE_PROJECT_SLUG:-dryzkn}
-ENV VITE_MCP_PROXY_URL=${VITE_MCP_PROXY_URL}
 
 # Copy package files
 COPY package*.json ./
