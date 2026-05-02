@@ -57,8 +57,8 @@ export async function uploadMedia(
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const data = JSON.parse(xhr.responseText);
-            // Selise might return the URL in different fields depending on config
-            const publicUrl = data.url || data.fileUrl || data.publicUrl || data.result?.url || data.data?.url;
+            // Support multiple possible response structures
+            const publicUrl = data.url || data.fileUrl || data.publicUrl || data.result?.url || data.data?.url || data.path;
             
             if (!publicUrl) {
               console.error("Selise Media Upload Success but no URL found in response:", data);
@@ -67,7 +67,7 @@ export async function uploadMedia(
             }
 
             resolve({
-              url: publicUrl,
+              url: publicUrl.startsWith('http') ? publicUrl : `${API_BASE}${publicUrl}`,
               fileName: data.fileName || file.name,
               fileSize: data.fileSize || file.size,
               mimeType: data.mimeType || file.type,
@@ -89,15 +89,22 @@ export async function uploadMedia(
       };
 
       xhr.onerror = () => {
-        console.error("Network error during Selise Media Upload");
-        reject(new Error('Network error. Check your connection or CORS settings.'));
+        console.error("Network error during Selise Media Upload. This is likely a CORS issue or incorrect endpoint.");
+        reject(new Error('Network error. The storage service might be blocking this request (CORS) or the endpoint is incorrect.'));
       };
+      
+      // Try Files/Upload instead of Documents/Upload
+      xhr.open('POST', `${API_BASE}/storage/v1/Files/Upload`);
+      Object.entries(headers).forEach(([key, value]) => {
+        xhr.setRequestHeader(key, value);
+      });
+      
       xhr.send(formData);
     });
   }
 
   // Simple fetch for when progress is not needed
-  const res = await fetch(`${API_BASE}/storage/v1/Documents/Upload`, {
+  const res = await fetch(`${API_BASE}/storage/v1/Files/Upload`, {
     method: 'POST',
     headers,
     body: formData,
@@ -115,14 +122,14 @@ export async function uploadMedia(
   }
 
   const data = await res.json();
-  const publicUrl = data.url || data.fileUrl || data.publicUrl || data.result?.url || data.data?.url;
+  const publicUrl = data.url || data.fileUrl || data.publicUrl || data.result?.url || data.data?.url || data.path;
   
   if (!publicUrl) {
     throw new Error('Upload succeeded but no public URL was returned.');
   }
 
   return {
-    url: publicUrl,
+    url: publicUrl.startsWith('http') ? publicUrl : `${API_BASE}${publicUrl}`,
     fileName: data.fileName || file.name,
     fileSize: data.fileSize || file.size,
     mimeType: data.mimeType || file.type,
