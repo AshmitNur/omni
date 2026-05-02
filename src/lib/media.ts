@@ -11,7 +11,14 @@ import { getAccessToken } from './blocks';
 
 const API_BASE = import.meta.env.VITE_BLOCKS_API_URL || 'https://api.seliseblocks.com';
 const X_BLOCKS_KEY = import.meta.env.VITE_X_BLOCKS_KEY || '';
-const STORAGE_CONFIGURATION = import.meta.env.VITE_BLOCKS_STORAGE_CONFIGURATION || 'Default';
+const STORAGE_CONFIGURATIONS = String(
+  import.meta.env.VITE_BLOCKS_STORAGE_CONFIGURATIONS ||
+    import.meta.env.VITE_BLOCKS_STORAGE_CONFIGURATION ||
+    'Default'
+)
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 const STORAGE_MODULE_NAMES = String(import.meta.env.VITE_BLOCKS_STORAGE_MODULE_NAMES || '8,10,2')
   .split(',')
   .map((value) => Number(value.trim()))
@@ -35,14 +42,28 @@ interface PreSignedUploadResponse {
   fileId?: string;
 }
 
+interface UploadCandidate {
+  configurationName: string;
+  moduleName: number;
+}
+
+function isHostedBlocksRuntime() {
+  if (typeof window === 'undefined') return false;
+  return !['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+}
+
 function getAuthHeaders() {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-blocks-key': X_BLOCKS_KEY,
   };
   const token = getAccessToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) headers.Authorization = `bearer ${token}`;
   return headers;
+}
+
+function getRequestCredentials(): RequestCredentials | undefined {
+  return isHostedBlocksRuntime() ? 'include' : undefined;
 }
 
 function assertSupportedImage(file: File) {
@@ -82,28 +103,94 @@ function getResponseErrorMessage(data: any, fallback: string) {
   return fallback;
 }
 
-async function requestPreSignedUrl(file: File, moduleName: number): Promise<PreSignedUploadResponse> {
+function readStringCandidate(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function collectConfigurationNames(value: unknown, names = new Set<string>()): Set<string> {
+  if (!value || typeof value !== 'object') return names;
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectConfigurationNames(item, names));
+    return names;
+  }
+
+  const record = value as Record<string, unknown>;
+  const candidate =
+    readStringCandidate(record.configurationName) ||
+    readStringCandidate(record.ConfigurationName) ||
+    readStringCandidate(record.name) ||
+    readStringCandidate(record.Name);
+
+  if (candidate) names.add(candidate);
+  Object.values(record).forEach((item) => collectConfigurationNames(item, names));
+  return names;
+}
+
+async function fetchStorageConfigurationNames(): Promise<string[]> {
+  const url = new URL(`${API_BASE}/cloudconfiguration/v1/Storage/Gets`);
+  url.searchParams.set('ProjectKey', X_BLOCKS_KEY);
+
+  try {
+    const res = await fetch(url.toString(), {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: getRequestCredentials(),
+    });
+    if (!res.ok) return [];
+
+    const data = await parseErrorResponse(res);
+    return Array.from(collectConfigurationNames(data));
+  } catch (error) {
+    console.warn('Unable to discover Selise storage configurations.', error);
+    return [];
+  }
+}
+
+function uniqueValues<T>(values: T[]) {
+  return Array.from(new Set(values));
+}
+
+async function getUploadCandidates(): Promise<UploadCandidate[]> {
+  const discoveredConfigurations = await fetchStorageConfigurationNames();
+  const configurationNames = uniqueValues([...STORAGE_CONFIGURATIONS, ...discoveredConfigurations]);
+
+  return configurationNames.flatMap((configurationName) =>
+    STORAGE_MODULE_NAMES.map((moduleName) => ({ configurationName, moduleName }))
+  );
+}
+
+async function requestPreSignedUrl(
+  file: File,
+  candidate: UploadCandidate
+): Promise<PreSignedUploadResponse> {
   const payload = {
     name: file.name,
     projectKey: X_BLOCKS_KEY,
     itemId: '',
     metaData: '',
     accessModifier: 'Public',
-    configurationName: STORAGE_CONFIGURATION,
+    configurationName: candidate.configurationName,
     parentDirectoryId: '',
     tags: '',
-    moduleName,
+    moduleName: candidate.moduleName,
   };
 
   const res = await fetch(`${API_BASE}/uds/v1/Files/GetPreSignedUrlForUpload`, {
     method: 'POST',
     headers: getAuthHeaders(),
+    credentials: getRequestCredentials(),
     body: JSON.stringify(payload),
   });
 
   const data = await parseErrorResponse(res);
   if (!res.ok) {
-    throw new Error(getResponseErrorMessage(data, `moduleName ${moduleName} failed (${res.status})`));
+    throw new Error(
+      getResponseErrorMessage(
+        data,
+        `configuration "${candidate.configurationName}", moduleName ${candidate.moduleName} failed (${res.status})`
+      )
+    );
   }
 
   return data as PreSignedUploadResponse;
@@ -111,16 +198,23 @@ async function requestPreSignedUrl(file: File, moduleName: number): Promise<PreS
 
 async function getPreSignedUrl(file: File): Promise<PreSignedUploadResponse> {
   const errors: string[] = [];
+  const candidates = await getUploadCandidates();
 
-  for (const moduleName of STORAGE_MODULE_NAMES) {
+  for (const candidate of candidates) {
     try {
-      const data = await requestPreSignedUrl(file, moduleName);
+      const data = await requestPreSignedUrl(file, candidate);
       if (data.isSuccess && data.uploadUrl) return data;
 
       const details = data.errors ? Object.values(data.errors).join(' ') : 'No upload URL returned';
-      errors.push(`moduleName ${moduleName}: ${details}`);
+      errors.push(
+        `configuration "${candidate.configurationName}", moduleName ${candidate.moduleName}: ${details}`
+      );
     } catch (error) {
-      errors.push(error instanceof Error ? error.message : `moduleName ${moduleName} failed`);
+      errors.push(
+        error instanceof Error
+          ? error.message
+          : `configuration "${candidate.configurationName}", moduleName ${candidate.moduleName} failed`
+      );
     }
   }
 
