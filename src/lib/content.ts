@@ -345,7 +345,7 @@ function buildInventoryContentInput(ownerId: string, username: string, siteData:
   const payload = buildContentPayload(ownerId, username, siteData);
 
   return {
-    ItemName: `${INVENTORY_CONTENT_TAG}:${payload.slug}:${ownerId.slice(0, 8)}`,
+    ItemName: `${INVENTORY_CONTENT_TAG}:${payload.slug}`,
     Category: INVENTORY_CONTENT_CATEGORY,
     Supplier: ownerId,
     ItemLoc: payload.username,
@@ -499,47 +499,102 @@ async function upsertInventorySiteContent(
     };
   };
 
-  const existing = await getInventorySiteByOwner(ownerId);
-  const input = buildInventoryContentInput(ownerId, username, siteData);
-
-  if (existing?.itemId) {
-    await postGraphql<UpdateResponse>(
-      `mutation UpdateVibeInventorySite($filter: String!, $input: InventoryItemUpdateInput!) {
-        updateInventoryItem(filter: $filter, input: $input) {
-          itemId
-          acknowledged
-        }
-      }`,
-      {
-        filter: inventoryFilter({ ItemId: existing.itemId }),
-        input,
-      },
-      true
-    );
-
-    return {
-      ...existing,
-      data: normalizeSiteData(siteData, username),
-      updatedAt: new Date().toISOString(),
-    };
+export async function upsertInventorySiteContent(
+  ownerId: string,
+  username: string,
+  siteData: Partial<VibeSiteData>
+): Promise<VibeSiteContent | null> {
+  if (!ownerId) {
+    console.error('[OMNI] Cannot upsert: ownerId is missing');
+    return null;
   }
 
-  const inserted = await postGraphql<InsertResponse>(
-    `mutation InsertVibeInventorySite($input: InventoryItemInsertInput!) {
-      insertInventoryItem(input: $input) {
-        itemId
-        acknowledged
-      }
-    }`,
-    { input },
-    true
-  );
+  console.log(`[OMNI] Starting site upsert for user: ${ownerId} (${username})`);
 
-  return {
-    ...(buildContentPayload(ownerId, username, siteData) as VibeSiteContent),
-    itemId: inserted.insertInventoryItem?.itemId,
-    data: normalizeSiteData(siteData, username),
-  };
+  // Strategy 0: Use MCP Proxy to bypass CORS for content
+  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
+  if (proxyUrl) {
+    try {
+      console.log('[OMNI] Attempting site sync via MCP Proxy...');
+      const proxyRes = await fetch(`${proxyUrl}/proxy/upsert-site`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerId, username, siteData })
+      });
+
+      if (proxyRes.ok) {
+        const data = await proxyRes.json();
+        console.log('[OMNI] Proxy site sync successful:', data);
+        // Extract ItemId from either insert or update response
+        const finalId = data.data?.insertInventoryItem?.itemId || 
+                      data.data?.updateInventoryItem?.itemId || 
+                      data.insertInventoryItem?.itemId || 
+                      data.updateInventoryItem?.itemId;
+
+        return {
+          ...(buildContentPayload(ownerId, username, siteData) as VibeSiteContent),
+          itemId: finalId,
+          data: normalizeSiteData(siteData, username),
+        };
+      }
+      console.warn('[OMNI] Proxy site sync failed, falling back to direct...');
+    } catch (err) {
+      console.error('[OMNI] Proxy site error:', err);
+    }
+  }
+
+  const input = buildInventoryContentInput(ownerId, username, siteData);
+  const existing = await getInventorySiteByOwner(ownerId);
+
+  try {
+    if (existing?.itemId) {
+      console.log(`[OMNI] Existing site found (${existing.itemId}). Updating...`);
+      const response = await postGraphql<any>(
+        `mutation UpdateVibeSite($itemId: String!, $input: InventoryItemInput!) {
+          updateInventoryItem(itemId: $itemId, input: $input) {
+            itemId
+            acknowledged
+          }
+        }`,
+        {
+          itemId: existing.itemId,
+          input: { ...input, ItemId: existing.itemId }
+        },
+        true
+      );
+      
+      console.log('[OMNI] Update response:', response);
+      return {
+        ...existing,
+        data: normalizeSiteData(siteData, username),
+        updatedAt: new Date().toISOString()
+      };
+    } else {
+      console.log('[OMNI] No existing site. Inserting new record...');
+      const response = await postGraphql<any>(
+        `mutation InsertVibeSite($input: InventoryItemInput!) {
+          insertInventoryItem(input: $input) {
+            itemId
+            acknowledged
+          }
+        }`,
+        { input },
+        true
+      );
+
+      console.log('[OMNI] Insert response:', response);
+      const newItemId = response.insertInventoryItem?.itemId;
+
+      return {
+        ...(buildContentPayload(ownerId, username, siteData) as VibeSiteContent),
+        itemId: newItemId,
+        data: normalizeSiteData(siteData, username),
+      };
+    }
+  } catch (error) {
+    console.error('[OMNI] Upsert FAILED:', error);
+    return null;
+  }
 }
 
 function normalizeContentRecord(record: unknown): VibeSiteContent | null {

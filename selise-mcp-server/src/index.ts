@@ -141,6 +141,72 @@ app.post("/proxy/upload", async (req, res) => {
   }
 });
 
+// PROXY ROUTE: Site Content Upsert
+app.post("/proxy/upsert-site", async (req, res) => {
+  try {
+    const { ownerId, username, siteData } = req.body;
+    if (!ownerId) return res.status(400).json({ error: "ownerId is required" });
+
+    const graphqlUrl = `${API_BASE}/uds/v1/${PROJECT_SLUG}/gateway`;
+    
+    // 1. Check for existing item
+    const checkQuery = `
+      query GetSite($input: DynamicQueryInput) {
+        getInventoryItems(input: $input) {
+          items { ItemId }
+        }
+      }
+    `;
+    const checkRes = await fetch(graphqlUrl, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({
+        query: checkQuery,
+        variables: {
+          input: {
+            filter: JSON.stringify({ Category: "VibeSite", Supplier: ownerId }),
+            pageNo: 1, pageSize: 1
+          }
+        }
+      })
+    });
+    const checkData: any = await checkRes.json();
+    const existingId = checkData.data?.getInventoryItems?.items?.[0]?.ItemId;
+
+    // 2. Perform Insert or Update
+    const mutation = existingId 
+      ? `mutation Update($itemId: String!, $input: InventoryItemInput!) {
+          updateInventoryItem(itemId: $itemId, input: $input) { itemId }
+        }`
+      : `mutation Insert($input: InventoryItemInput!) {
+          insertInventoryItem(input: $input) { itemId }
+        }`;
+
+    const input = {
+      ItemName: `vibe-site:${username || 'user'}`,
+      Category: "VibeSite",
+      Supplier: ownerId,
+      ItemLoc: username || 'user',
+      ItemDescription: JSON.stringify(siteData)
+    };
+
+    const upsertRes = await fetch(graphqlUrl, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({
+        query: mutation,
+        variables: { itemId: existingId, input }
+      })
+    });
+
+    const result = await upsertRes.json();
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error("Proxy Site Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 let transport: SSEServerTransport | null = null;
 
 app.get("/sse", async (req, res) => {
