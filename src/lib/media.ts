@@ -61,11 +61,10 @@ function isHostedBlocksRuntime() {
 
 function getAuthHeaders() {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     'x-blocks-key': X_BLOCKS_KEY,
   };
   const token = getAccessToken();
-  if (token) headers.Authorization = `bearer ${token}`;
+  if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
 }
 
@@ -360,6 +359,55 @@ async function uploadViaLegacyEndpoint(
   };
 }
 
+async function uploadToLocalStorage(
+  file: File,
+  folder: string,
+  onProgress?: (percent: number) => void
+): Promise<MediaUploadResult> {
+  const formData = new FormData();
+  formData.append('File', file);
+  formData.append('projectKey', X_BLOCKS_KEY);
+  formData.append('folder', folder);
+  formData.append('isPublic', 'true');
+
+  const url = `${API_BASE}/uds/v1/Files/UploadFileToLocalStorage`;
+  
+  // Note: We DO NOT set Content-Type header manually for FormData to let the browser set the boundary
+  const headers: Record<string, string> = {
+    'x-blocks-key': X_BLOCKS_KEY,
+  };
+  const token = getAccessToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  const data = await parseErrorResponse(res);
+  if (!res.ok) {
+    throw new Error(getResponseErrorMessage(data, `LocalStorage Upload failed (${res.status})`));
+  }
+
+  // The endpoint typically returns an itemId or a direct URL
+  const publicUrl = data.url || data.fileUrl || data.publicUrl || data.result?.url || data.data?.url || data.path;
+  const itemId = data.itemId || data.id || data.fileId;
+  
+  if (!publicUrl && !itemId) {
+    throw new Error('Upload succeeded but no reference (URL or ID) was returned.');
+  }
+
+  onProgress?.(100);
+  return {
+    url: publicUrl ? (String(publicUrl).startsWith('http') ? publicUrl : `${API_BASE}${publicUrl}`) : `${API_BASE}/media/v1/File/${itemId}`,
+    fileName: data.fileName || file.name,
+    fileSize: data.fileSize || file.size,
+    mimeType: data.mimeType || file.type,
+    itemId: itemId,
+  };
+}
+
 export async function uploadMedia(
   file: File,
   folder = 'vibe-uploads',
@@ -401,6 +449,14 @@ export async function uploadMedia(
     } catch (err) {
       console.error('[Media] Proxy error:', err);
     }
+  }
+
+  // Strategy 0.5: Direct Local Storage Upload (New Primary Strategy)
+  try {
+    console.log('[Media] Attempting LocalStorage upload...');
+    return await uploadToLocalStorage(file, folder, onProgress);
+  } catch (error) {
+    console.warn('[Media] LocalStorage upload failed, trying pre-signed URL...', error);
   }
 
   try {

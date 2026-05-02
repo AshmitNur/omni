@@ -196,7 +196,21 @@ server.tool(
 
 // Set up Express App with CORS support
 const app = express();
-app.use(cors()); // Allow your frontend to talk to this proxy
+app.use(cors({
+  origin: true, // Allow all origins (or you can specify http://localhost:5173)
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-blocks-key']
+}));
+
+// Logging middleware for proxy
+app.use((req, res, next) => {
+  if (req.url.startsWith('/proxy')) {
+    console.log(`[Proxy Request] ${req.method} ${req.url}`);
+  }
+  next();
+});
+
 app.use(express.json({ limit: '50mb' }));
 
 // PROXY ROUTE: The "CORS Fixer"
@@ -438,6 +452,58 @@ app.get("/proxy/iam-account", async (req, res) => {
         "x-blocks-key": X_BLOCKS_KEY,
         "Authorization": req.headers.authorization || ""
       }
+    });
+    const result = await response.json();
+    console.log(`[IAM Account] Response for ${req.headers.authorization?.slice(0, 20)}... :`, JSON.stringify(result).slice(0, 200));
+    res.status(response.status).json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PROXY ROUTE: Generic UDS Data CRUD
+app.options(/^\/proxy\/data\/.*/, (req, res) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-blocks-key");
+  res.status(200).send();
+});
+
+app.all(/^\/proxy\/data\/([^\/]+)(.*)/, async (req, res) => {
+  try {
+    const schemaName = req.params[0];
+    const subPath = req.params[1] || "";
+    const method = req.method;
+    const url = `${API_BASE}/uds/v1/data/${schemaName}${subPath}${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`;
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        "x-blocks-key": X_BLOCKS_KEY,
+        "Authorization": req.headers.authorization || "",
+        "Content-Type": "application/json"
+      },
+      body: ["POST", "PUT", "PATCH"].includes(method) ? JSON.stringify(req.body) : undefined
+    });
+
+    const result = await response.json();
+    res.status(response.status).json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PROXY ROUTE: Role Assignment
+app.post("/proxy/assign-role", async (req, res) => {
+  try {
+    const response = await fetch(`${API_BASE}/idp/v1/Role/Assign`, {
+      method: "POST",
+      headers: {
+        "x-blocks-key": X_BLOCKS_KEY,
+        "Authorization": req.headers.authorization || "",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(req.body)
     });
     const result = await response.json();
     res.status(response.status).json(result);

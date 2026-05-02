@@ -10,16 +10,15 @@ import { COMPONENT_REGISTRY, type ComponentType, type VibeComponentData } from '
 import { RenderComponent } from '../components/builder/Renderer';
 import { PropertiesPanel } from '../components/builder/PropertiesPanel';
 import {
-  ensureSiteContent,
-  getLocalSiteData,
-  getPreferredUsername,
-  getPublicSitePath,
-  normalizePageSlug,
-  normalizeSiteData,
-  setLocalSiteData,
-  upsertSiteContent,
-  type VibeSiteData,
-} from '../lib/content';
+  ensureWebsite,
+  updateWebsite,
+  createPage,
+  updatePage,
+  deletePage,
+  type Website,
+  type Page,
+} from '../lib/uds';
+import { getPreferredUsername, getPublicSitePath, normalizePageSlug, slugify } from '../lib/content';
 
 // Sortable wrapper for canvas components
 function SortableCanvasItem({ component, isSelected, onClick, onRemove }: any) {
@@ -88,69 +87,33 @@ export default function EditorDashboard() {
   const [activeTab, setActiveTab] = useState<'pages' | 'add'>('pages');
 
   // Site Data State
-  const [siteData, setSiteData] = useState<any>(null);
+  const [currentWebsite, setCurrentWebsite] = useState<Website | null>(null);
+  const [pages, setPages] = useState<Page[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
-
-  const defaultData: VibeSiteData = {
-    siteName: 'My Vibe Site',
-    pages: [
-      {
-        id: 'home',
-        title: 'Home',
-        slug: 'home',
-        components: [
-          { id: 'comp_1', type: 'hero', props: COMPONENT_REGISTRY.hero.defaultProps }
-        ] as VibeComponentData[]
-      }
-    ]
-  };
 
   // Initial Data Load
   useEffect(() => {
-    // Reset ALL editor state when user changes to prevent cross-user leaks
-    setSiteData(null);
-    setActivePageId('');
-    setSelectedComponentId(null);
-    setSaveStatus('saved');
-    setSaveError('');
     setIsDataLoading(true);
-
     const loadData = async () => {
-      // If we are currently signing out or have no user, show loading or guest mode
       if (!user) {
-        // Guest mode fallback
-        try {
-          const saved = getLocalSiteData('guest');
-          setSiteData(saved ? { ...defaultData, ...saved } : defaultData);
-        } catch (err) {
-          setSiteData(defaultData);
-        }
         setIsDataLoading(false);
         return;
       }
 
       try {
-        const preferredUsername = getPreferredUsername(user);
-        
-        // Safety guard: ensure user.itemId exists
-        if (!user.itemId) {
-          throw new Error("User ID missing from session");
-        }
-
-        const content = await ensureSiteContent(user.itemId, preferredUsername, defaultData);
-        if (content && content.data) {
-          setSiteData(normalizeSiteData({ ...defaultData, ...content.data }, preferredUsername));
-          // also update local cache
-          setLocalSiteData(user.itemId, content.data);
-        } else {
-          // If no content in API, check local storage or use default
-          const local = getLocalSiteData(user.itemId);
-          setSiteData(local ? normalizeSiteData({ ...defaultData, ...local }, preferredUsername) : normalizeSiteData(defaultData, preferredUsername));
+        const username = getPreferredUsername(user);
+        console.log("[Editor] Loading UDS data for user:", user.itemId, "username:", username);
+        const { website, pages: sitePages } = await ensureWebsite(user.itemId, username, 'My Vibe Site');
+        console.log("[Editor] Data loaded. Website:", website.itemId, "Pages:", sitePages.length);
+        setCurrentWebsite(website);
+        setPages(sitePages);
+        if (sitePages.length > 0) {
+          setActivePageId(sitePages[0].itemId || sitePages[0].id);
         }
       } catch (err) {
-        console.error("Failed to load site data from API, using local cache", err);
-        const local = user?.itemId ? getLocalSiteData(user.itemId) : null;
-        setSiteData(local ? normalizeSiteData({ ...defaultData, ...local }, getPreferredUsername(user)) : normalizeSiteData(defaultData, getPreferredUsername(user)));
+        console.error("[Editor] Failed to load UDS data", err);
+        setSaveStatus('error');
+        setSaveError("Critical: Failed to load site data from Selise UDS.");
       } finally {
         setIsDataLoading(false);
       }
@@ -159,13 +122,6 @@ export default function EditorDashboard() {
   }, [user]);
 
   const [activePageId, setActivePageId] = useState<string>('');
-  
-  // Keep activePageId in sync when siteData initially loads
-  useEffect(() => {
-    if (siteData && !activePageId && siteData.pages?.length > 0) {
-      setActivePageId(siteData.pages[0].id);
-    }
-  }, [siteData, activePageId]);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
 
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | 'error'>('saved');
@@ -179,70 +135,64 @@ export default function EditorDashboard() {
 
   // Auto-save logic
   useEffect(() => {
-    // CRITICAL: Do not auto-save while we are still loading data or if siteData is null
-    if (!siteData || isDataLoading) return;
+    if (!currentWebsite || isDataLoading) return;
     
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
     setSaveStatus('unsaved');
-    setSaveError('');
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
     saveTimeoutRef.current = setTimeout(async () => {
       setSaveStatus('saving');
-      if (user) {
-        // Save to Local Cache immediately
-        setLocalSiteData(user.itemId, siteData);
-        try {
-          // Push to Selise API
-          await upsertSiteContent(user.itemId, getPreferredUsername(user), siteData);
+      try {
+        if (user && currentWebsite.itemId) {
+          // Save Website metadata if changed
+          await updateWebsite(currentWebsite.itemId, currentWebsite);
+          
+          // Save all pages (for simplicity we save all, or we could track dirty ones)
+          for (const page of pages) {
+            if (page.itemId) {
+              await updatePage(page.itemId, page);
+            } else {
+              const newPage = await createPage(page);
+              setPages(prev => prev.map(p => p.id === page.id ? { ...p, itemId: newPage.itemId } : p));
+            }
+          }
           setSaveStatus('saved');
-        } catch (err) {
-          console.error("Failed to save to Selise API", err);
-          setSaveError(getErrorMessage(err));
-          setSaveStatus('error');
         }
-      } else {
-        // Guest mode
-        setLocalSiteData('guest', siteData);
-        setSaveStatus('saved');
+      } catch (err) {
+        console.error("Auto-save failed", err);
+        setSaveStatus('error');
+        setSaveError(getErrorMessage(err));
       }
-    }, 1500);
+    }, 2000);
 
     return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
-  }, [siteData, user]);
+  }, [currentWebsite, pages, user]);
 
-  const activePage = siteData?.pages?.find((p: any) => p.id === activePageId) || null;
-  const activeComponent = activePage?.components?.find((c: any) => c.id === selectedComponentId) || null;
+  const activePage = pages.find((p: any) => (p.itemId || p.id) === activePageId) || null;
+  const activeComponent = activePage?.layout?.find((c: any) => c.id === selectedComponentId) || null;
   const publicUsername = getPreferredUsername(user);
   const liveSitePath = getPublicSitePath(publicUsername, activePage?.slug || 'home');
 
   const handleSave = async () => {
-    if (!siteData) return false;
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (!currentWebsite || !user) return false;
     setSaveStatus('saving');
-    setSaveError('');
-    let persistedToBlocks = false;
-    
-    if (user) {
-      setLocalSiteData(user.itemId, siteData);
-      try {
-        await upsertSiteContent(user.itemId, publicUsername, siteData);
-        persistedToBlocks = true;
-      } catch (err) {
-        console.error("Manual save to Selise API failed", err);
-        setSaveError(getErrorMessage(err));
-        setSaveStatus('error');
-        return false;
+    try {
+      await updateWebsite(currentWebsite.itemId!, currentWebsite);
+      for (const page of pages) {
+        if (page.itemId) await updatePage(page.itemId, page);
+        else await createPage(page);
       }
-    } else {
-      setLocalSiteData('guest', siteData);
+      setSaveStatus('saved');
+      return true;
+    } catch (err) {
+      setSaveStatus('error');
+      setSaveError(getErrorMessage(err));
+      return false;
     }
-    
-    setSaveStatus('saved');
-    return persistedToBlocks || !user;
   };
 
   const handleOpenLiveSite = async () => {
@@ -251,52 +201,70 @@ export default function EditorDashboard() {
   };
 
   // Page Management
-  const addPage = () => {
-    const newId = `page_${Date.now()}`;
-    const newPage = {
-      id: newId,
-      title: 'New Page',
+  const addPage = async () => {
+    console.log("[Editor] Attempting to add page. CurrentWebsite:", currentWebsite?.itemId, "User:", user?.itemId);
+    if (!currentWebsite || !user) {
+      console.warn("[Editor] Cannot add page: website or user missing");
+      return;
+    }
+    const newPage: Partial<Page> = {
+      websiteId: currentWebsite.itemId,
+      tenantUserId: user.itemId,
+      name: 'New Page',
       slug: `new-page-${Date.now()}`,
-      components: []
+      order: pages.length,
+      isHomePage: false,
+      layout: [],
     };
-    setSiteData((prev: any) => ({ ...prev, pages: [...prev.pages, newPage] }));
-    setActivePageId(newId);
-    setSelectedComponentId(null);
+    try {
+      const created: any = await createPage(newPage);
+      const newPageId = created.itemId || created.id || created.data?.itemId;
+      
+      if (newPageId) {
+        const finalPage = { ...created, itemId: newPageId };
+        setPages(prev => [...prev, finalPage]);
+        setActivePageId(newPageId);
+        setSelectedComponentId(null);
+      } else {
+        throw new Error("Failed to get ID for new page");
+      }
+    } catch (err) {
+      console.error("Failed to create page", err);
+      setSaveStatus('error');
+      setSaveError("Failed to create page. Check if server is running.");
+    }
   };
 
   const updateActivePage = (updates: any) => {
-    setSiteData((prev: any) => ({
-      ...prev,
-      pages: prev.pages.map((p: any) => p.id === activePageId ? { ...p, ...updates } : p)
-    }));
+    setPages(prev => prev.map(p => (p.itemId || p.id) === activePageId ? { ...p, ...updates } : p));
   };
 
   // Component Management
   const addComponent = (type: ComponentType) => {
     if (!activePage) return;
-    const newComponent: VibeComponentData = {
+    const newComponent = {
       id: `comp_${Date.now()}`,
       type,
       props: { ...COMPONENT_REGISTRY[type].defaultProps }
     };
     
     updateActivePage({
-      components: [...activePage.components, newComponent]
+      layout: [...(activePage.layout || []), newComponent]
     });
     setSelectedComponentId(newComponent.id);
   };
 
-  const updateComponent = (id: string, updates: Partial<VibeComponentData>) => {
+  const updateComponent = (id: string, updates: any) => {
     if (!activePage) return;
     updateActivePage({
-      components: activePage.components.map((c: any) => c.id === id ? { ...c, ...updates } : c)
+      layout: activePage.layout.map((c: any) => c.id === id ? { ...c, ...updates } : c)
     });
   };
 
   const removeComponent = (id: string) => {
     if (!activePage) return;
     updateActivePage({
-      components: activePage.components.filter((c: any) => c.id !== id)
+      layout: activePage.layout.filter((c: any) => c.id !== id)
     });
     if (selectedComponentId === id) setSelectedComponentId(null);
   };
@@ -311,11 +279,11 @@ export default function EditorDashboard() {
     const { active, over } = event;
     if (!over || active.id === over.id || !activePage) return;
 
-    const oldIndex = activePage.components.findIndex((c: any) => c.id === active.id);
-    const newIndex = activePage.components.findIndex((c: any) => c.id === over.id);
+    const oldIndex = activePage.layout.findIndex((c: any) => c.id === active.id);
+    const newIndex = activePage.layout.findIndex((c: any) => c.id === over.id);
 
     updateActivePage({
-      components: arrayMove(activePage.components, oldIndex, newIndex)
+      layout: arrayMove(activePage.layout, oldIndex, newIndex)
     });
   };
 
@@ -391,19 +359,19 @@ export default function EditorDashboard() {
                     <Plus className="w-4 h-4" />
                   </button>
                 </div>
-                {siteData?.pages?.map((page: any) => (
+                {pages.map((page: any) => (
                   <button
-                    key={page.id}
-                    onClick={() => { setActivePageId(page.id); setSelectedComponentId(null); }}
+                    key={page.itemId || page.id}
+                    onClick={() => { setActivePageId(page.itemId || page.id); setSelectedComponentId(null); }}
                     className={clsx(
                       "w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left",
-                      activePageId === page.id 
+                      activePageId === (page.itemId || page.id) 
                         ? "text-white bg-blue-500/10 border border-blue-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" 
                         : "text-white/60 hover:text-white hover:bg-white/5 border border-transparent"
                     )}
                   >
-                    <Layout className={clsx("w-4 h-4 mr-3", activePageId === page.id ? "text-blue-400" : "text-white/40")} />
-                    {page.title}
+                    <Layout className={clsx("w-4 h-4 mr-3", activePageId === (page.itemId || page.id) ? "text-blue-400" : "text-white/40")} />
+                    {page.name}
                   </button>
                 ))}
               </div>
@@ -438,7 +406,7 @@ export default function EditorDashboard() {
           <div className="max-w-5xl mx-auto py-12 px-4 md:px-12 min-h-full flex flex-col">
             {activePage ? (
               <div className="flex-1 bg-black/40 border border-white/5 rounded-2xl shadow-2xl p-4 md:p-8 min-h-[800px]">
-                {!activePage.components || activePage.components.length === 0 ? (
+                 {!activePage.layout || activePage.layout.length === 0 ? (
                   <div className="w-full h-full min-h-[400px] flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-xl text-center p-8">
                     <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
                       <Layout className="w-8 h-8 text-white/20" />
@@ -454,9 +422,9 @@ export default function EditorDashboard() {
                   </div>
                 ) : (
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                    <SortableContext items={activePage.components?.map((c: any) => c.id) || []} strategy={verticalListSortingStrategy}>
+                    <SortableContext items={activePage.layout?.map((c: any) => c.id) || []} strategy={verticalListSortingStrategy}>
                       <div className="space-y-4">
-                        {activePage.components?.map((comp: any) => (
+                        {activePage.layout?.map((comp: any) => (
                           <SortableCanvasItem
                             key={comp.id}
                             component={comp}
@@ -499,8 +467,8 @@ export default function EditorDashboard() {
                 <label className="text-[10px] font-medium text-white/60 uppercase">Page Title</label>
                 <input 
                   type="text" 
-                  value={activePage.title}
-                  onChange={(e) => updateActivePage({ title: e.target.value })}
+                  value={activePage.name}
+                  onChange={(e) => updateActivePage({ name: e.target.value })}
                   className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
                 />
               </div>

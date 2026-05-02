@@ -80,13 +80,19 @@ function readUserString(record: Record<string, unknown>, keys: string[]) {
 
 function normalizeUser(data: unknown): BlocksUser {
   const record = isAuthRecord(data) ? data : {};
+  const itemId = readUserString(record, ['itemId', 'id', 'ItemId', 'Id', 'userName', 'UserName']);
+  
+  if (!itemId) {
+    console.warn('[OMNI] normalizeUser: No ID found in user data!', record);
+  }
+
   const firstName = readUserString(record, ['firstName', 'FirstName']);
   const lastName = readUserString(record, ['lastName', 'LastName']);
   const userName = readUserString(record, ['userName', 'UserName']);
   const email = readUserString(record, ['email', 'Email']);
 
   return {
-    itemId: readUserString(record, ['itemId', 'id', 'ItemId', 'Id', 'userName', 'UserName']),
+    itemId: itemId || '',
     email,
     userName,
     firstName,
@@ -312,6 +318,33 @@ export async function fetchCurrentAccount(): Promise<BlocksUser> {
 
   cacheUser(user);
   return user;
+}
+
+// ─── RBAC: Assign Role ─────────────────────────────────────────
+export async function assignRole(userId: string, roleName: string): Promise<boolean> {
+  const payload = { userId, roleName };
+
+  if (MCP_PROXY_URL) {
+    try {
+      const res = await fetch(`${MCP_PROXY_URL}/proxy/assign-role`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAccessToken()}`
+        },
+        body: JSON.stringify(payload),
+      });
+      return res.ok;
+    } catch { /* fallback */ }
+  }
+
+  const res = await fetch(`${API_BASE}/idp/v1/Role/Assign`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  return res.ok;
 }
 
 // ─── Auth: Logout ──────────────────────────────────────────────
