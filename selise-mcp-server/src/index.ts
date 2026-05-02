@@ -213,7 +213,7 @@ app.post("/proxy/token", async (req, res) => {
     const response = await fetch(`${API_BASE}/idp/v1/Authentication/Token`, {
       method: "POST",
       headers: {
-        "x-blocks-key": PROJECT_KEY,
+        "x-blocks-key": X_BLOCKS_KEY,
         "Content-Type": "application/x-www-form-urlencoded"
       },
       body: new URLSearchParams(req.body).toString()
@@ -261,7 +261,7 @@ app.get("/proxy/get-account", async (req, res) => {
     const response = await fetch(`${API_BASE}/identifier/v1/People/GetAccount`, {
       method: "GET",
       headers: {
-        "x-blocks-key": PROJECT_KEY,
+        "x-blocks-key": X_BLOCKS_KEY,
         "Authorization": req.headers.authorization || ""
       }
     });
@@ -278,7 +278,7 @@ app.get("/proxy/iam-account", async (req, res) => {
     const response = await fetch(`${API_BASE}/idp/v1/Iam/GetAccount`, {
       method: "GET",
       headers: {
-        "x-blocks-key": PROJECT_KEY,
+        "x-blocks-key": X_BLOCKS_KEY,
         "Authorization": req.headers.authorization || ""
       }
     });
