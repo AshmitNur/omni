@@ -30,11 +30,13 @@ export async function uploadMedia(
   formData.append('folder', folder);
   formData.append('isPublic', 'true');
 
-  const token = getAccessToken();
+  // Some Selise Storage services reject Authorization headers on public uploads.
+  // We will try using ONLY the x-blocks-key first.
   const headers: Record<string, string> = {
     'x-blocks-key': X_BLOCKS_KEY,
   };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  // If we wanted to include token, we would: if (token) headers['Authorization'] = `Bearer ${token}`;
+  // But for now, we leave it out to fix CORS preflight issues.
   // Do NOT set Content-Type; browser sets it automatically with boundary for FormData
 
   // If we need progress tracking, use XMLHttpRequest
