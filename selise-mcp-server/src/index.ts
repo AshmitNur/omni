@@ -207,6 +207,88 @@ app.post("/proxy/upsert-site", async (req, res) => {
   }
 });
 
+// PROXY ROUTE: Token (Login)
+app.post("/proxy/token", async (req, res) => {
+  try {
+    const response = await fetch(`${API_BASE}/idp/v1/Authentication/Token`, {
+      method: "POST",
+      headers: {
+        "x-blocks-key": PROJECT_KEY,
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: new URLSearchParams(req.body).toString()
+    });
+    const result = await response.json();
+    res.status(response.status).json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PROXY ROUTE: Signup
+app.post("/proxy/signup", async (req, res) => {
+  try {
+    const response = await fetch(`${API_BASE}/identifier/v1/People/Signup`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(req.body)
+    });
+    const result = await response.json();
+    res.status(response.status).json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PROXY ROUTE: Activate
+app.post("/proxy/activate", async (req, res) => {
+  try {
+    const response = await fetch(`${API_BASE}/idp/v1/Iam/Activate`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(req.body)
+    });
+    const result = await response.json();
+    res.status(response.status).json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PROXY ROUTE: Get Account
+app.get("/proxy/get-account", async (req, res) => {
+  try {
+    const response = await fetch(`${API_BASE}/identifier/v1/People/GetAccount`, {
+      method: "GET",
+      headers: {
+        "x-blocks-key": PROJECT_KEY,
+        "Authorization": req.headers.authorization || ""
+      }
+    });
+    const result = await response.json();
+    res.status(response.status).json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PROXY ROUTE: Get IAM Account
+app.get("/proxy/iam-account", async (req, res) => {
+  try {
+    const response = await fetch(`${API_BASE}/idp/v1/Iam/GetAccount`, {
+      method: "GET",
+      headers: {
+        "x-blocks-key": PROJECT_KEY,
+        "Authorization": req.headers.authorization || ""
+      }
+    });
+    const result = await response.json();
+    res.status(response.status).json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 let transport: SSEServerTransport | null = null;
 
 app.get("/sse", async (req, res) => {

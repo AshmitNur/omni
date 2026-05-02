@@ -84,11 +84,30 @@ function createTokenBody(values: Record<string, string>) {
 
 // ─── Auth: Login (Password Grant) ──────────────────────────────
 export async function loginWithPassword(email: string, password: string): Promise<BlocksUser> {
-  const body = createTokenBody({
+  const payload = {
     grant_type: 'password',
     username: email.trim(),
     password,
-  });
+  };
+
+  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
+  if (proxyUrl) {
+    try {
+      console.log('[OMNI] Attempting login via MCP Proxy...');
+      const res = await fetch(`${proxyUrl}/proxy/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        storeTokens(data.access_token, data.refresh_token);
+        return await fetchCurrentAccount();
+      }
+    } catch (err) {
+      console.warn('[OMNI] Login proxy failed, falling back...');
+    }
+  }
 
   const res = await fetch(`${API_BASE}/idp/v1/Authentication/Token`, {
     method: 'POST',
@@ -96,7 +115,7 @@ export async function loginWithPassword(email: string, password: string): Promis
       'Content-Type': 'application/x-www-form-urlencoded',
       'x-blocks-key': X_BLOCKS_KEY,
     },
-    body: body.toString(),
+    body: createTokenBody(payload).toString(),
   });
 
   if (!res.ok) {
@@ -120,13 +139,27 @@ export async function loginWithPassword(email: string, password: string): Promis
 
 // ─── Auth: Public Signup (Step 1: Request Code) ────────────────
 export async function requestSignup(email: string): Promise<boolean> {
+  const payload = { email, captchaCode: '' };
+  
+  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
+  if (proxyUrl) {
+    try {
+      const res = await fetch(`${proxyUrl}/proxy/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return (await res.json()).isSuccess;
+    } catch (err) { /* fallback */ }
+  }
+
   const res = await fetch(`${API_BASE}/identifier/v1/People/Signup`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-blocks-key': X_BLOCKS_KEY,
     },
-    body: JSON.stringify({ email, captchaCode: '' }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -148,16 +181,33 @@ export async function activateAccount(
   password: string,
   code: string
 ): Promise<boolean> {
+  const payload = {
+    firstname: firstName,
+    lastname: lastName,
+    password,
+    code,
+  };
+
+  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
+  if (proxyUrl) {
+    try {
+      const res = await fetch(`${proxyUrl}/proxy/activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return true;
+    } catch (err) { /* fallback */ }
+  }
+
   const res = await fetch(`${API_BASE}/idp/v1/Iam/Activate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-blocks-key': X_BLOCKS_KEY,
     },
-    body: JSON.stringify({
-      firstname: firstName,
-      lastname: lastName,
-      password,
+    body: JSON.stringify(payload),
+  });
       code,
       captchaCode: '',
       projectKey: X_BLOCKS_KEY,
@@ -207,6 +257,24 @@ export async function refreshAccessToken(): Promise<boolean> {
 
 // ─── IAM: Get current user account ─────────────────────────────
 export async function fetchCurrentAccount(): Promise<BlocksUser> {
+  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
+  if (proxyUrl) {
+    try {
+      const res = await fetch(`${proxyUrl}/proxy/iam-account`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${getAccessToken()}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const user = normalizeUser(data);
+        cacheUser(user);
+        return user;
+      }
+    } catch (err) { /* fallback */ }
+  }
+
   const res = await fetch(`${API_BASE}/idp/v1/Iam/GetAccount`, {
     method: 'GET',
     headers: getHeaders(),
