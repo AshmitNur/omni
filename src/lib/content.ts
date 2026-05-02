@@ -17,6 +17,13 @@ const CONTENT_TYPE = import.meta.env.VITE_CONTENT_TYPE || 'vibe_site';
 const CONTENT_API_BASE = (
   import.meta.env.VITE_CONTENT_API_BASE || `${API_BASE}/cms/v1/Content`
 ).replace(/\/$/, '');
+const GRAPHQL_API_BASE = (
+  import.meta.env.VITE_BLOCKS_GRAPHQL_API_BASE ||
+  `${API_BASE}/uds/v1/${PROJECT_SLUG}/gateway`
+).replace(/\/$/, '');
+const INVENTORY_CONTENT_CATEGORY = 'VibeSite';
+const INVENTORY_CONTENT_TAG = 'vibe-site';
+const INVENTORY_CHUNK_SIZE = 2500;
 
 type ContentRecord = Record<string, unknown>;
 
@@ -80,8 +87,17 @@ function getHeaders(includeAuth = true) {
     'x-blocks-key': X_BLOCKS_KEY,
   };
   const token = includeAuth ? getAccessToken() : null;
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) headers.Authorization = `bearer ${token}`;
   return headers;
+}
+
+function isHostedBlocksRuntime() {
+  if (typeof window === 'undefined') return false;
+  return !['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+}
+
+function getRequestCredentials(): RequestCredentials | undefined {
+  return isHostedBlocksRuntime() ? 'include' : undefined;
 }
 
 function createContentError(prefix: string, status: number, error: unknown) {
@@ -117,6 +133,7 @@ async function postContent(
   const res = await fetch(`${CONTENT_API_BASE}/${action}`, {
     method: 'POST',
     headers: getHeaders(includeAuth),
+    credentials: getRequestCredentials(),
     body: JSON.stringify(payload),
   });
 
@@ -127,6 +144,32 @@ async function postContent(
   }
 
   return data;
+}
+
+async function postGraphql<T>(
+  query: string,
+  variables: Record<string, unknown> = {},
+  includeAuth = true
+): Promise<T> {
+  const res = await fetch(GRAPHQL_API_BASE, {
+    method: 'POST',
+    headers: getHeaders(includeAuth),
+    credentials: getRequestCredentials(),
+    body: JSON.stringify({ query, variables }),
+  });
+
+  const data = await parseResponse(res);
+  if (!res.ok) {
+    throw createContentError('Data Gateway request failed', res.status, data);
+  }
+
+  if (isRecord(data) && Array.isArray(data.errors) && data.errors.length > 0) {
+    const firstError = data.errors.find(isRecord);
+    const message = firstError ? readString(firstError, ['message']) : undefined;
+    throw new Error(message || 'Data Gateway request failed');
+  }
+
+  return (isRecord(data) ? data.data : data) as T;
 }
 
 function unwrapContentResponse(data: unknown): unknown | null {
@@ -254,6 +297,219 @@ function buildContentPayload(ownerId: string, username: string, siteData: Partia
   };
 }
 
+function encodeSiteData(data: unknown) {
+  const serialized = JSON.stringify(data);
+  const chunks: string[] = [];
+  for (let index = 0; index < serialized.length; index += INVENTORY_CHUNK_SIZE) {
+    chunks.push(serialized.slice(index, index + INVENTORY_CHUNK_SIZE));
+  }
+  return chunks;
+}
+
+function decodeSiteData(chunks: unknown, fallback: VibeSiteData) {
+  if (!Array.isArray(chunks)) return fallback;
+  try {
+    return JSON.parse(chunks.map(String).join('')) as VibeSiteData;
+  } catch {
+    return fallback;
+  }
+}
+
+function buildInventoryContentInput(ownerId: string, username: string, siteData: Partial<VibeSiteData>) {
+  const payload = buildContentPayload(ownerId, username, siteData);
+
+  return {
+    ItemName: `${INVENTORY_CONTENT_TAG}:${payload.slug}`,
+    Category: INVENTORY_CONTENT_CATEGORY,
+    Supplier: ownerId,
+    ItemLoc: payload.username,
+    Status: 'Published',
+    Tags: [INVENTORY_CONTENT_TAG, payload.slug, ownerId],
+    ItemImageFileId: payload.slug,
+    ItemImageFileIds: encodeSiteData(payload),
+    Stock: 1,
+    Price: 0,
+    EligibleWarranty: false,
+    EligibleReplacement: false,
+    Discount: false,
+  };
+}
+
+function inventoryFilter(filter: Record<string, unknown>) {
+  return JSON.stringify(filter);
+}
+
+function normalizeInventorySiteRecord(record: unknown): VibeSiteContent | null {
+  if (!isRecord(record)) return null;
+
+  const ownerId = readString(record, ['Supplier']) || '';
+  const username = readString(record, ['ItemLoc', 'ItemImageFileId']) || 'site';
+  const fallbackData = normalizeSiteData(
+    {
+      siteName: readString(record, ['ItemName'])?.replace(`${INVENTORY_CONTENT_TAG}:`, '') || 'My Vibe Site',
+      username,
+      publicSlug: username,
+      pages: [],
+    },
+    username
+  );
+  const data = normalizeSiteData(decodeSiteData(record.ItemImageFileIds, fallbackData), username);
+
+  return {
+    itemId: readString(record, ['ItemId']),
+    contentType: CONTENT_TYPE,
+    ownerId,
+    userId: ownerId,
+    username,
+    slug: username,
+    data,
+    isPublished: true,
+    projectSlug: PROJECT_SLUG,
+    createdAt: readString(record, ['CreatedDate']),
+    updatedAt: readString(record, ['LastUpdatedDate']),
+  };
+}
+
+async function getInventorySiteByOwner(ownerId: string): Promise<VibeSiteContent | null> {
+  type Response = {
+    getInventoryItems?: {
+      items?: unknown[];
+    };
+  };
+
+  const data = await postGraphql<Response>(
+    `query VibeInventorySite($input: DynamicQueryInput) {
+      getInventoryItems(input: $input) {
+        items {
+          ItemId
+          ItemName
+          Category
+          Supplier
+          ItemLoc
+          Status
+          Tags
+          ItemImageFileId
+          ItemImageFileIds
+          CreatedDate
+          LastUpdatedDate
+        }
+      }
+    }`,
+    {
+      input: {
+        filter: inventoryFilter({ Category: INVENTORY_CONTENT_CATEGORY, Supplier: ownerId }),
+        sort: JSON.stringify({ LastUpdatedDate: -1 }),
+        pageNo: 1,
+        pageSize: 1,
+      },
+    },
+    true
+  );
+
+  return normalizeInventorySiteRecord(data.getInventoryItems?.items?.[0]);
+}
+
+async function getInventorySiteBySlug(slug: string, includeAuth: boolean): Promise<VibeSiteContent | null> {
+  type Response = {
+    getInventoryItems?: {
+      items?: unknown[];
+    };
+  };
+
+  const publicSlug = slugify(slug, 'site');
+  const data = await postGraphql<Response>(
+    `query VibeInventorySite($input: DynamicQueryInput) {
+      getInventoryItems(input: $input) {
+        items {
+          ItemId
+          ItemName
+          Category
+          Supplier
+          ItemLoc
+          Status
+          Tags
+          ItemImageFileId
+          ItemImageFileIds
+          CreatedDate
+          LastUpdatedDate
+        }
+      }
+    }`,
+    {
+      input: {
+        filter: inventoryFilter({ Category: INVENTORY_CONTENT_CATEGORY, ItemLoc: publicSlug }),
+        sort: JSON.stringify({ LastUpdatedDate: -1 }),
+        pageNo: 1,
+        pageSize: 1,
+      },
+    },
+    includeAuth
+  );
+
+  return normalizeInventorySiteRecord(data.getInventoryItems?.items?.[0]);
+}
+
+async function upsertInventorySiteContent(
+  ownerId: string,
+  username: string,
+  siteData: Partial<VibeSiteData>
+): Promise<VibeSiteContent> {
+  type InsertResponse = {
+    insertInventoryItem?: {
+      itemId?: string;
+      acknowledged?: boolean;
+    };
+  };
+  type UpdateResponse = {
+    updateInventoryItem?: {
+      itemId?: string;
+      acknowledged?: boolean;
+    };
+  };
+
+  const existing = await getInventorySiteByOwner(ownerId);
+  const input = buildInventoryContentInput(ownerId, username, siteData);
+
+  if (existing?.itemId) {
+    await postGraphql<UpdateResponse>(
+      `mutation UpdateVibeInventorySite($filter: String!, $input: InventoryItemUpdateInput!) {
+        updateInventoryItem(filter: $filter, input: $input) {
+          itemId
+          acknowledged
+        }
+      }`,
+      {
+        filter: inventoryFilter({ ItemId: existing.itemId }),
+        input,
+      },
+      true
+    );
+
+    return {
+      ...existing,
+      data: normalizeSiteData(siteData, username),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  const inserted = await postGraphql<InsertResponse>(
+    `mutation InsertVibeInventorySite($input: InventoryItemInsertInput!) {
+      insertInventoryItem(input: $input) {
+        itemId
+        acknowledged
+      }
+    }`,
+    { input },
+    true
+  );
+
+  return {
+    ...(buildContentPayload(ownerId, username, siteData) as VibeSiteContent),
+    itemId: inserted.insertInventoryItem?.itemId,
+    data: normalizeSiteData(siteData, username),
+  };
+}
+
 function normalizeContentRecord(record: unknown): VibeSiteContent | null {
   const unwrapped = unwrapContentResponse(record);
   if (!isRecord(unwrapped)) return null;
@@ -289,43 +545,81 @@ export async function upsertSiteContent(
   username: string,
   siteData: Partial<VibeSiteData>
 ): Promise<VibeSiteContent> {
-  const payload = buildContentPayload(ownerId, username, siteData);
-  const data = await postContent('Upsert', payload, true);
-  return normalizeContentRecord(data || payload) || (payload as VibeSiteContent);
+  try {
+    return await upsertInventorySiteContent(ownerId, username, siteData);
+  } catch (gatewayError) {
+    console.warn('Data Gateway content sync failed, trying Content API fallback.', gatewayError);
+    const payload = buildContentPayload(ownerId, username, siteData);
+    const data = await postContent('Upsert', payload, true);
+    return normalizeContentRecord(data || payload) || (payload as VibeSiteContent);
+  }
 }
 
 export async function getSiteContentByOwner(ownerId: string): Promise<VibeSiteContent | null> {
-  const data = await postContent(
-    'GetByOwner',
-    {
-      contentType: CONTENT_TYPE,
-      ownerId,
-      userId: ownerId,
-      projectKey: X_BLOCKS_KEY,
-      projectSlug: PROJECT_SLUG,
-    },
-    true
-  );
+  try {
+    const inventoryRecord = await getInventorySiteByOwner(ownerId);
+    if (inventoryRecord) return inventoryRecord;
+  } catch (gatewayError) {
+    console.warn('Data Gateway content load failed, trying Content API fallback.', gatewayError);
+  }
 
-  return normalizeContentRecord(data);
+  try {
+    const data = await postContent(
+      'GetByOwner',
+      {
+        contentType: CONTENT_TYPE,
+        ownerId,
+        userId: ownerId,
+        projectKey: X_BLOCKS_KEY,
+        projectSlug: PROJECT_SLUG,
+      },
+      true
+    );
+
+    return normalizeContentRecord(data);
+  } catch (contentError) {
+    console.warn('Content API owner lookup failed.', contentError);
+    return null;
+  }
 }
 
 export async function getSiteContentBySlug(slug: string): Promise<VibeSiteContent | null> {
   const publicSlug = slugify(slug, 'site');
-  const data = await postContent(
-    'GetBySlug',
-    {
-      contentType: CONTENT_TYPE,
-      slug: publicSlug,
-      username: publicSlug,
-      isPublished: true,
-      projectKey: X_BLOCKS_KEY,
-      projectSlug: PROJECT_SLUG,
-    },
-    false
-  );
+  try {
+    const inventoryRecord = await getInventorySiteBySlug(publicSlug, false);
+    if (inventoryRecord) return inventoryRecord;
+  } catch (gatewayError) {
+    const token = getAccessToken();
+    if (token) {
+      try {
+        const authenticatedInventoryRecord = await getInventorySiteBySlug(publicSlug, true);
+        if (authenticatedInventoryRecord) return authenticatedInventoryRecord;
+      } catch (authenticatedGatewayError) {
+        console.warn('Authenticated Data Gateway slug lookup failed.', authenticatedGatewayError);
+      }
+    }
+    console.warn('Public Data Gateway slug lookup failed, trying Content API fallback.', gatewayError);
+  }
 
-  return normalizeContentRecord(data);
+  try {
+    const data = await postContent(
+      'GetBySlug',
+      {
+        contentType: CONTENT_TYPE,
+        slug: publicSlug,
+        username: publicSlug,
+        isPublished: true,
+        projectKey: X_BLOCKS_KEY,
+        projectSlug: PROJECT_SLUG,
+      },
+      false
+    );
+
+    return normalizeContentRecord(data);
+  } catch (contentError) {
+    console.warn('Content API slug lookup failed.', contentError);
+    return null;
+  }
 }
 
 export async function ensureSiteContent(
