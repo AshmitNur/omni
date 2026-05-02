@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LogOut, ArrowRight, CheckCircle2, Eye, Layout, Plus, Trash2, GripVertical, Settings } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { GlowCard } from '../components/ui/spotlight-card';
+import { Link, useNavigate } from 'react-router-dom';
+import { LogOut, ArrowRight, CheckCircle2, Layout, Plus, Trash2, GripVertical, Settings } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../context/AuthContext';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -11,7 +9,17 @@ import { CSS } from '@dnd-kit/utilities';
 import { COMPONENT_REGISTRY, type ComponentType, type VibeComponentData } from '../components/builder/registry';
 import { RenderComponent } from '../components/builder/Renderer';
 import { PropertiesPanel } from '../components/builder/PropertiesPanel';
-import { upsertSiteContent, getSiteContentByOwner, getLocalSiteData, setLocalSiteData } from '../lib/content';
+import {
+  ensureSiteContent,
+  getLocalSiteData,
+  getPreferredUsername,
+  getPublicSitePath,
+  normalizePageSlug,
+  normalizeSiteData,
+  setLocalSiteData,
+  upsertSiteContent,
+  type VibeSiteData,
+} from '../lib/content';
 
 // Sortable wrapper for canvas components
 function SortableCanvasItem({ component, isSelected, onClick, onRemove }: any) {
@@ -73,7 +81,6 @@ function SortableCanvasItem({ component, isSelected, onClick, onRemove }: any) {
 }
 
 export default function EditorDashboard() {
-  const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   
@@ -84,7 +91,7 @@ export default function EditorDashboard() {
   const [siteData, setSiteData] = useState<any>(null);
   const [isDataLoading, setIsDataLoading] = useState(true);
 
-  const defaultData = {
+  const defaultData: VibeSiteData = {
     siteName: 'My Vibe Site',
     pages: [
       {
@@ -110,20 +117,21 @@ export default function EditorDashboard() {
       }
 
       try {
-        const content = await getSiteContentByOwner(user.itemId);
+        const preferredUsername = getPreferredUsername(user);
+        const content = await ensureSiteContent(user.itemId, preferredUsername, defaultData);
         if (content && content.data) {
-          setSiteData({ ...defaultData, ...content.data });
+          setSiteData(normalizeSiteData({ ...defaultData, ...content.data }, preferredUsername));
           // also update local cache
           setLocalSiteData(user.itemId, content.data);
         } else {
           // If no content in API, check local storage or use default
           const local = getLocalSiteData(user.itemId);
-          setSiteData(local ? { ...defaultData, ...local } : defaultData);
+          setSiteData(local ? normalizeSiteData({ ...defaultData, ...local }, preferredUsername) : normalizeSiteData(defaultData, preferredUsername));
         }
       } catch (err) {
         console.error("Failed to load site data from API, using local cache", err);
         const local = getLocalSiteData(user.itemId);
-        setSiteData(local ? { ...defaultData, ...local } : defaultData);
+        setSiteData(local ? normalizeSiteData({ ...defaultData, ...local }, getPreferredUsername(user)) : normalizeSiteData(defaultData, getPreferredUsername(user)));
       } finally {
         setIsDataLoading(false);
       }
@@ -141,12 +149,13 @@ export default function EditorDashboard() {
   }, [siteData, activePageId]);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
 
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | 'error'>('saved');
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
 
   // Auto-save logic
   useEffect(() => {
+    if (!siteData) return;
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
@@ -161,12 +170,11 @@ export default function EditorDashboard() {
         setLocalSiteData(user.itemId, siteData);
         try {
           // Push to Selise API
-          await upsertSiteContent(user.itemId, user.userName || user.email.split('@')[0], siteData);
+          await upsertSiteContent(user.itemId, getPreferredUsername(user), siteData);
           setSaveStatus('saved');
         } catch (err) {
           console.error("Failed to save to Selise API", err);
-          // Still mark as 'unsaved' or maybe 'saved' locally? Let's keep it 'saved' since local is updated
-          setSaveStatus('saved'); 
+          setSaveStatus('error');
         }
       } else {
         // Guest mode
@@ -180,23 +188,36 @@ export default function EditorDashboard() {
 
   const activePage = siteData?.pages?.find((p: any) => p.id === activePageId) || null;
   const activeComponent = activePage?.components?.find((c: any) => c.id === selectedComponentId) || null;
+  const publicUsername = getPreferredUsername(user);
+  const liveSitePath = getPublicSitePath(publicUsername, activePage?.slug || 'home');
 
   const handleSave = async () => {
+    if (!siteData) return false;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setSaveStatus('saving');
+    let persistedToBlocks = false;
     
     if (user) {
       setLocalSiteData(user.itemId, siteData);
       try {
-        await upsertSiteContent(user.itemId, user.userName || user.email.split('@')[0], siteData);
+        await upsertSiteContent(user.itemId, publicUsername, siteData);
+        persistedToBlocks = true;
       } catch (err) {
         console.error("Manual save to Selise API failed", err);
+        setSaveStatus('error');
+        return false;
       }
     } else {
       setLocalSiteData('guest', siteData);
     }
     
     setSaveStatus('saved');
+    return persistedToBlocks || !user;
+  };
+
+  const handleOpenLiveSite = async () => {
+    const saved = await handleSave();
+    if (saved) navigate(liveSitePath);
   };
 
   // Page Management
@@ -289,13 +310,11 @@ export default function EditorDashboard() {
             {saveStatus === 'saved' && 'All changes saved'}
             {saveStatus === 'saving' && 'Saving...'}
             {saveStatus === 'unsaved' && 'Unsaved changes'}
+            {saveStatus === 'error' && 'Local draft saved, Blocks sync failed'}
           </span>
           <button 
             className="hidden sm:flex items-center text-xs font-medium px-3 py-1.5 rounded-md border border-white/10 hover:bg-white/5 text-white/80 transition-colors" 
-            onClick={() => {
-              handleSave();
-              navigate('/preview'); // Placeholder for preview routing
-            }}
+            onClick={handleOpenLiveSite}
           >
             Live Preview <ArrowRight className="w-3 h-3 ml-1" />
           </button>
@@ -458,10 +477,10 @@ export default function EditorDashboard() {
                 <input 
                   type="text" 
                   value={activePage.slug}
-                  onChange={(e) => updateActivePage({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
+                  onChange={(e) => updateActivePage({ slug: normalizePageSlug(e.target.value) })}
                   className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-blue-500/50 font-mono"
                 />
-                <p className="text-[10px] text-white/30 mt-1">omni.site/site/{user?.userName || user?.email?.split('@')[0] || 'user'}/{activePage.slug}</p>
+                <p className="text-[10px] text-white/30 mt-1">{window.location.origin}{getPublicSitePath(publicUsername, activePage.slug)}</p>
               </div>
             </div>
           ) : (

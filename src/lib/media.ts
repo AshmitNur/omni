@@ -1,15 +1,21 @@
 /**
- * Selise Media Block API Client
- * Handles file uploads (images) to Selise Storage/Media Block.
- * 
- * On upload success, returns a permanent public URL that can be stored
- * in the Content Block fields (profile_image_url, header_image_url, etc.).
+ * Selise Media/Storage Block client.
+ *
+ * The upload flow follows the Blocks Construct pattern:
+ * 1. Ask UDS for a public pre-signed upload URL.
+ * 2. PUT the file to that URL.
+ * 3. Store the clean public URL in Content Block site JSON.
  */
 
 import { getAccessToken } from './blocks';
 
 const API_BASE = import.meta.env.VITE_BLOCKS_API_URL || 'https://api.seliseblocks.com';
 const X_BLOCKS_KEY = import.meta.env.VITE_X_BLOCKS_KEY || '';
+const STORAGE_CONFIGURATION = import.meta.env.VITE_BLOCKS_STORAGE_CONFIGURATION || 'Default';
+const STORAGE_MODULE_NAME = Number(import.meta.env.VITE_BLOCKS_STORAGE_MODULE_NAME || 8);
+const MAX_IMAGE_SIZE_BYTES = Number(import.meta.env.VITE_MAX_IMAGE_UPLOAD_BYTES || 5 * 1024 * 1024);
+
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export interface MediaUploadResult {
   url: string;
@@ -19,10 +25,111 @@ export interface MediaUploadResult {
   itemId?: string;
 }
 
-// ─── Upload a file to Selise Media Block ───────────────────────
-export async function uploadMedia(
+interface PreSignedUploadResponse {
+  errors?: Record<string, string>;
+  isSuccess?: boolean;
+  uploadUrl?: string;
+  fileId?: string;
+}
+
+function getAuthHeaders() {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-blocks-key': X_BLOCKS_KEY,
+  };
+  const token = getAccessToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+function assertSupportedImage(file: File) {
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    throw new Error('Only JPG, PNG, and WEBP images are supported.');
+  }
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    const maxMb = Math.round(MAX_IMAGE_SIZE_BYTES / (1024 * 1024));
+    throw new Error(`Image must be ${maxMb}MB or smaller.`);
+  }
+}
+
+async function parseErrorResponse(res: Response) {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+}
+
+async function getPreSignedUrl(file: File, folder: string): Promise<PreSignedUploadResponse> {
+  const payload = {
+    name: file.name,
+    projectKey: X_BLOCKS_KEY,
+    itemId: '',
+    metaData: JSON.stringify({
+      folder,
+      contentType: file.type,
+      size: file.size,
+    }),
+    accessModifier: 'Public',
+    configurationName: STORAGE_CONFIGURATION,
+    parentDirectoryId: '',
+    tags: folder,
+    moduleName: STORAGE_MODULE_NAME,
+    additionalProperties: {
+      folder,
+      originalName: file.name,
+    },
+  };
+
+  const res = await fetch(`${API_BASE}/uds/v1/Files/GetPreSignedUrlForUpload`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await parseErrorResponse(res);
+  if (!res.ok) {
+    throw new Error(data.message || data.error || `Pre-signed upload URL failed (${res.status})`);
+  }
+
+  return data as PreSignedUploadResponse;
+}
+
+function uploadToSignedUrl(
+  uploadUrl: string,
   file: File,
-  folder: string = 'vibe-uploads',
+  onProgress?: (percent: number) => void
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || !onProgress) return;
+      onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100);
+        resolve(uploadUrl.split('?')[0]);
+        return;
+      }
+      reject(new Error(`Storage upload failed (${xhr.status})`));
+    };
+
+    xhr.onerror = () => reject(new Error('Storage upload failed due to a network error.'));
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    xhr.setRequestHeader('x-ms-blob-type', 'BlockBlob');
+    xhr.send(file);
+  });
+}
+
+async function uploadViaLegacyEndpoint(
+  file: File,
+  folder: string,
   onProgress?: (percent: number) => void
 ): Promise<MediaUploadResult> {
   const formData = new FormData();
@@ -30,48 +137,31 @@ export async function uploadMedia(
   formData.append('folder', folder);
   formData.append('isPublic', 'true');
 
-  // Move project key to query param to avoid custom headers (triggers CORS preflight)
   const uploadUrl = new URL(`${API_BASE}/storage/v1/Files/Upload`);
-  uploadUrl.searchParams.append('projectKey', X_BLOCKS_KEY);
-  uploadUrl.searchParams.append('folder', folder);
-  uploadUrl.searchParams.append('isPublic', 'true');
+  uploadUrl.searchParams.set('projectKey', X_BLOCKS_KEY);
+  uploadUrl.searchParams.set('folder', folder);
+  uploadUrl.searchParams.set('isPublic', 'true');
 
-  // Using fetch with NO custom headers to try and trigger a "Simple Request" (no preflight)
   const res = await fetch(uploadUrl.toString(), {
     method: 'POST',
+    headers: {
+      'x-blocks-key': X_BLOCKS_KEY,
+      ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
+    },
     body: formData,
-    // Note: Do NOT add headers here if we want to bypass preflight
   });
 
+  const data = await parseErrorResponse(res);
   if (!res.ok) {
-    const text = await res.text();
-    console.error(`Selise Media Upload Failed (${res.status}):`, text);
-    try {
-      const errData = JSON.parse(text);
-      throw new Error(errData.message || errData.error || `Upload failed (${res.status})`);
-    } catch {
-      throw new Error(`Upload failed (${res.status})`);
-    }
+    throw new Error(data.message || data.error || `Upload failed (${res.status})`);
   }
 
-  const data = await res.json();
   const publicUrl = data.url || data.fileUrl || data.publicUrl || data.result?.url || data.data?.url || data.path;
-  
-  if (!publicUrl) {
-    console.error("Upload succeeded but no URL found in response:", data);
-    throw new Error('Upload succeeded but no public URL was returned.');
-  }
+  if (!publicUrl) throw new Error('Upload succeeded but no public URL was returned.');
 
-  // If the path is relative, prefix it with the API_BASE
-  const finalUrl = publicUrl.startsWith('http') 
-    ? publicUrl 
-    : (API_BASE.startsWith('http') ? `${API_BASE}${publicUrl}` : `${window.location.origin}${API_BASE}${publicUrl}`);
-
-  // Fake progress completion for UI
-  if (onProgress) onProgress(100);
-
+  onProgress?.(100);
   return {
-    url: finalUrl,
+    url: String(publicUrl).startsWith('http') ? publicUrl : `${API_BASE}${publicUrl}`,
     fileName: data.fileName || file.name,
     fileSize: data.fileSize || file.size,
     mimeType: data.mimeType || file.type,
@@ -79,8 +169,35 @@ export async function uploadMedia(
   };
 }
 
-// ─── Fallback: Convert file to base64 data URL ────────────────
-// Used as a graceful degradation when Media Block is unavailable.
+export async function uploadMedia(
+  file: File,
+  folder = 'vibe-uploads',
+  onProgress?: (percent: number) => void
+): Promise<MediaUploadResult> {
+  assertSupportedImage(file);
+  onProgress?.(0);
+
+  try {
+    const preSigned = await getPreSignedUrl(file, folder);
+    if (!preSigned.isSuccess || !preSigned.uploadUrl) {
+      const details = preSigned.errors ? Object.values(preSigned.errors).join(' ') : '';
+      throw new Error(details || 'Pre-signed upload URL was not returned.');
+    }
+
+    const publicUrl = await uploadToSignedUrl(preSigned.uploadUrl, file, onProgress);
+    return {
+      url: publicUrl,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type,
+      itemId: preSigned.fileId,
+    };
+  } catch (error) {
+    console.warn('Pre-signed Selise media upload failed, trying legacy upload endpoint.', error);
+    return uploadViaLegacyEndpoint(file, folder, onProgress);
+  }
+}
+
 export function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

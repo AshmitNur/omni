@@ -75,7 +75,11 @@ function AnimatedRoutes() {
         } />
         <Route path="/preview" element={<PageWrapper><Preview /></PageWrapper>} />
         <Route path="/site/:username" element={<PageWrapper><PublicSite /></PageWrapper>} />
-        <Route path="/site/:username/:slug" element={<PageWrapper><PublicSite /></PageWrapper>} />
+        <Route path="/site/:username/*" element={<PageWrapper><PublicSite /></PageWrapper>} />
+        <Route path="/u/:username" element={<PageWrapper><PublicSite /></PageWrapper>} />
+        <Route path="/u/:username/*" element={<PageWrapper><PublicSite /></PageWrapper>} />
+        <Route path="/profile/:username" element={<PageWrapper><PublicSite /></PageWrapper>} />
+        <Route path="/profile/:username/*" element={<PageWrapper><PublicSite /></PageWrapper>} />
         <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
       </Routes>
     </AnimatePresence>

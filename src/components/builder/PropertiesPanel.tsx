@@ -245,7 +245,7 @@ function ImageUploadField({ label, value, onChange }: any) {
         )}
         <label className={`w-full bg-white/5 hover:bg-white/10 border border-white/10 border-dashed rounded-lg p-2 text-center text-xs transition-colors ${isUploading ? 'opacity-50 cursor-not-allowed text-white/40' : 'cursor-pointer text-white/80'}`}>
           {isUploading ? 'Uploading...' : 'Upload Image'}
-          <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={isUploading} />
+          <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleUpload} disabled={isUploading} />
         </label>
         <div className="flex items-center gap-2">
           <span className="text-xs text-white/40">or URL:</span>

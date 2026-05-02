@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { RenderComponent } from '../components/builder/Renderer';
 import type { VibeComponentData } from '../components/builder/registry';
