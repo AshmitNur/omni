@@ -222,9 +222,9 @@ function ImageUploadField({ label, value, onChange }: any) {
         // Actual upload to Selise Media Block
         const result = await uploadMedia(file, 'vibe-uploads', (p) => setProgress(p));
         onChange(result.url);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Upload failed", err);
-        alert("Failed to upload image. Using local preview only.");
+        alert(`Upload Failed: ${err.message || 'Unknown error'}\nUsing local preview only.`);
       } finally {
         setIsUploading(false);
       }

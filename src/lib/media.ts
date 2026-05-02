@@ -57,22 +57,41 @@ export async function uploadMedia(
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const data = JSON.parse(xhr.responseText);
+            // Selise might return the URL in different fields depending on config
+            const publicUrl = data.url || data.fileUrl || data.publicUrl || data.result?.url || data.data?.url;
+            
+            if (!publicUrl) {
+              console.error("Selise Media Upload Success but no URL found in response:", data);
+              reject(new Error('Upload succeeded but no public URL was returned.'));
+              return;
+            }
+
             resolve({
-              url: data.url || data.fileUrl || data.publicUrl || '',
+              url: publicUrl,
               fileName: data.fileName || file.name,
               fileSize: data.fileSize || file.size,
               mimeType: data.mimeType || file.type,
               itemId: data.itemId,
             });
-          } catch {
-            reject(new Error('Invalid response from media upload'));
+          } catch (err) {
+            console.error("Failed to parse Selise Media response:", xhr.responseText);
+            reject(new Error('Invalid JSON response from media server.'));
           }
         } else {
-          reject(new Error(`Upload failed (${xhr.status})`));
+          console.error(`Selise Media Upload Failed (${xhr.status}):`, xhr.responseText);
+          try {
+            const errData = JSON.parse(xhr.responseText);
+            reject(new Error(errData.message || errData.error || `Upload failed with status ${xhr.status}`));
+          } catch {
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
         }
       };
 
-      xhr.onerror = () => reject(new Error('Network error during upload'));
+      xhr.onerror = () => {
+        console.error("Network error during Selise Media Upload");
+        reject(new Error('Network error. Check your connection or CORS settings.'));
+      };
       xhr.send(formData);
     });
   }
@@ -85,13 +104,25 @@ export async function uploadMedia(
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Media upload failed (${res.status})`);
+    const text = await res.text();
+    console.error(`Selise Media Upload (fetch) Failed (${res.status}):`, text);
+    try {
+      const errData = JSON.parse(text);
+      throw new Error(errData.message || errData.error || `Upload failed (${res.status})`);
+    } catch {
+      throw new Error(`Upload failed (${res.status})`);
+    }
   }
 
   const data = await res.json();
+  const publicUrl = data.url || data.fileUrl || data.publicUrl || data.result?.url || data.data?.url;
+  
+  if (!publicUrl) {
+    throw new Error('Upload succeeded but no public URL was returned.');
+  }
+
   return {
-    url: data.url || data.fileUrl || data.publicUrl || '',
+    url: publicUrl,
     fileName: data.fileName || file.name,
     fileSize: data.fileSize || file.size,
     mimeType: data.mimeType || file.type,
