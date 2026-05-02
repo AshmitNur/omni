@@ -179,7 +179,9 @@ export default function EditorDashboard() {
 
   // Auto-save logic
   useEffect(() => {
-    if (!siteData) return;
+    // CRITICAL: Do not auto-save while we are still loading data or if siteData is null
+    if (!siteData || isDataLoading) return;
+    
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;

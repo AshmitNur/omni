@@ -248,7 +248,11 @@ export function getPreferredUsername(user: {
   displayName?: string;
 } | null | undefined) {
   if (!user) return 'guest';
-  return slugify(user.userName || user.email?.split('@')[0] || user.displayName || user.itemId, 'user');
+  const rawName = user.userName || user.email?.split('@')[0] || user.displayName || user.itemId;
+  const slug = slugify(rawName, 'user');
+  // Avoid returning generic 'user' if possible
+  if (slug === 'user' && user.itemId) return slugify(user.itemId);
+  return slug;
 }
 
 export function normalizeSiteData(siteData: Partial<VibeSiteData> | ContentRecord | null | undefined, username?: string) {
@@ -341,7 +345,7 @@ function buildInventoryContentInput(ownerId: string, username: string, siteData:
   const payload = buildContentPayload(ownerId, username, siteData);
 
   return {
-    ItemName: `${INVENTORY_CONTENT_TAG}:${payload.slug}`,
+    ItemName: `${INVENTORY_CONTENT_TAG}:${payload.slug}:${ownerId.slice(0, 8)}`,
     Category: INVENTORY_CONTENT_CATEGORY,
     Supplier: ownerId,
     ItemLoc: payload.username,
@@ -429,7 +433,11 @@ async function getInventorySiteByOwner(ownerId: string): Promise<VibeSiteContent
     true
   );
 
-  return normalizeInventorySiteRecord(data.getInventoryItems?.items?.[0]);
+  const item = data.getInventoryItems?.items?.[0];
+  if (item) {
+    console.log(`[OMNI] Site data loaded from Inventory for ${ownerId}`);
+  }
+  return normalizeInventorySiteRecord(item);
 }
 
 async function getInventorySiteBySlug(slug: string, includeAuth: boolean): Promise<VibeSiteContent | null> {

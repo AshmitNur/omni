@@ -219,7 +219,7 @@ export async function fetchCurrentAccount(): Promise<BlocksUser> {
   const data = await res.json();
 
   const user: BlocksUser = {
-    itemId: data.itemId || data.id || '',
+    itemId: data.itemId || data.id || data.ItemId || data.Id || data.userName || '',
     email: data.email || '',
     userName: data.userName || '',
     firstName: data.firstName || '',
