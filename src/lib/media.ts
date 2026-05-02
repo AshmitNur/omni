@@ -24,9 +24,9 @@ const STORAGE_MODULE_NAMES = String(import.meta.env.VITE_BLOCKS_STORAGE_MODULE_N
   .map((value) => Number(value.trim()))
   .filter((value) => Number.isFinite(value));
 const MAX_IMAGE_SIZE_BYTES = Number(import.meta.env.VITE_MAX_IMAGE_UPLOAD_BYTES || 5 * 1024 * 1024);
-const EMBEDDED_IMAGE_MAX_WIDTH = Number(import.meta.env.VITE_EMBEDDED_IMAGE_MAX_WIDTH || 1200);
-const EMBEDDED_IMAGE_MAX_HEIGHT = Number(import.meta.env.VITE_EMBEDDED_IMAGE_MAX_HEIGHT || 900);
-const EMBEDDED_IMAGE_QUALITY = Number(import.meta.env.VITE_EMBEDDED_IMAGE_QUALITY || 0.78);
+const EMBEDDED_IMAGE_MAX_WIDTH = Number(import.meta.env.VITE_EMBEDDED_IMAGE_MAX_WIDTH || 720);
+const EMBEDDED_IMAGE_MAX_HEIGHT = Number(import.meta.env.VITE_EMBEDDED_IMAGE_MAX_HEIGHT || 540);
+const EMBEDDED_IMAGE_QUALITY = Number(import.meta.env.VITE_EMBEDDED_IMAGE_QUALITY || 0.68);
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 

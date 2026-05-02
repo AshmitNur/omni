@@ -150,8 +150,13 @@ export default function EditorDashboard() {
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
 
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | 'error'>('saved');
+  const [saveError, setSaveError] = useState<string>('');
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
+
+  const getErrorMessage = (error: unknown) => {
+    return error instanceof Error ? error.message : 'Blocks sync failed';
+  };
 
   // Auto-save logic
   useEffect(() => {
@@ -161,6 +166,7 @@ export default function EditorDashboard() {
       return;
     }
     setSaveStatus('unsaved');
+    setSaveError('');
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
     saveTimeoutRef.current = setTimeout(async () => {
@@ -174,6 +180,7 @@ export default function EditorDashboard() {
           setSaveStatus('saved');
         } catch (err) {
           console.error("Failed to save to Selise API", err);
+          setSaveError(getErrorMessage(err));
           setSaveStatus('error');
         }
       } else {
@@ -195,6 +202,7 @@ export default function EditorDashboard() {
     if (!siteData) return false;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setSaveStatus('saving');
+    setSaveError('');
     let persistedToBlocks = false;
     
     if (user) {
@@ -204,6 +212,7 @@ export default function EditorDashboard() {
         persistedToBlocks = true;
       } catch (err) {
         console.error("Manual save to Selise API failed", err);
+        setSaveError(getErrorMessage(err));
         setSaveStatus('error');
         return false;
       }
@@ -310,7 +319,9 @@ export default function EditorDashboard() {
             {saveStatus === 'saved' && 'All changes saved'}
             {saveStatus === 'saving' && 'Saving...'}
             {saveStatus === 'unsaved' && 'Unsaved changes'}
-            {saveStatus === 'error' && 'Local draft saved, Blocks sync failed'}
+            {saveStatus === 'error' && (
+              <span title={saveError || undefined}>Local draft saved, Blocks sync failed</span>
+            )}
           </span>
           <button 
             className="hidden sm:flex items-center text-xs font-medium px-3 py-1.5 rounded-md border border-white/10 hover:bg-white/5 text-white/80 transition-colors" 
