@@ -24,6 +24,9 @@ const STORAGE_MODULE_NAMES = String(import.meta.env.VITE_BLOCKS_STORAGE_MODULE_N
   .map((value) => Number(value.trim()))
   .filter((value) => Number.isFinite(value));
 const MAX_IMAGE_SIZE_BYTES = Number(import.meta.env.VITE_MAX_IMAGE_UPLOAD_BYTES || 5 * 1024 * 1024);
+const EMBEDDED_IMAGE_MAX_WIDTH = Number(import.meta.env.VITE_EMBEDDED_IMAGE_MAX_WIDTH || 1200);
+const EMBEDDED_IMAGE_MAX_HEIGHT = Number(import.meta.env.VITE_EMBEDDED_IMAGE_MAX_HEIGHT || 900);
+const EMBEDDED_IMAGE_QUALITY = Number(import.meta.env.VITE_EMBEDDED_IMAGE_QUALITY || 0.78);
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -321,16 +324,57 @@ export async function uploadMedia(
     } catch (fallbackError) {
       const fallbackMessage =
         fallbackError instanceof Error ? fallbackError.message : 'Legacy upload endpoint failed';
-      throw new Error(`${preSignedError.message}. Fallback upload failed: ${fallbackMessage}`);
+      console.warn('Selise legacy media upload failed, embedding compressed image data instead.', fallbackError);
+      const embeddedUrl = await fileToDataUrl(file);
+      onProgress?.(100);
+
+      return {
+        url: embeddedUrl,
+        fileName: file.name,
+        fileSize: embeddedUrl.length,
+        mimeType: 'image/jpeg',
+        itemId: `embedded:${file.name}:${fallbackMessage}`,
+      };
     }
   }
 }
 
 export function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsDataURL(file);
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(
+        1,
+        EMBEDDED_IMAGE_MAX_WIDTH / img.width,
+        EMBEDDED_IMAGE_MAX_HEIGHT / img.height
+      );
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        reject(new Error('Failed to prepare image preview'));
+        return;
+      }
+
+      context.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', EMBEDDED_IMAGE_QUALITY));
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    };
+
+    img.src = objectUrl;
   });
 }
