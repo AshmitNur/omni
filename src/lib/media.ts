@@ -62,25 +62,34 @@ async function parseErrorResponse(res: Response) {
   }
 }
 
+function getResponseErrorMessage(data: any, fallback: string) {
+  if (!data) return fallback;
+  if (typeof data === 'string') return data;
+  if (data.message || data.error || data.error_description) {
+    return data.message || data.error || data.error_description;
+  }
+  if (data.errors) {
+    if (Array.isArray(data.errors)) {
+      return data.errors.map((error: any) => error?.message || String(error)).join(' ');
+    }
+    if (typeof data.errors === 'object') {
+      return Object.values(data.errors).join(' ');
+    }
+  }
+  return fallback;
+}
+
 async function getPreSignedUrl(file: File, folder: string): Promise<PreSignedUploadResponse> {
   const payload = {
     name: file.name,
     projectKey: X_BLOCKS_KEY,
     itemId: '',
-    metaData: JSON.stringify({
-      folder,
-      contentType: file.type,
-      size: file.size,
-    }),
+    metaData: '',
     accessModifier: 'Public',
     configurationName: STORAGE_CONFIGURATION,
     parentDirectoryId: '',
-    tags: folder,
+    tags: '',
     moduleName: STORAGE_MODULE_NAME,
-    additionalProperties: {
-      folder,
-      originalName: file.name,
-    },
   };
 
   const res = await fetch(`${API_BASE}/uds/v1/Files/GetPreSignedUrlForUpload`, {
@@ -91,7 +100,7 @@ async function getPreSignedUrl(file: File, folder: string): Promise<PreSignedUpl
 
   const data = await parseErrorResponse(res);
   if (!res.ok) {
-    throw new Error(data.message || data.error || `Pre-signed upload URL failed (${res.status})`);
+    throw new Error(getResponseErrorMessage(data, `Pre-signed upload URL failed (${res.status})`));
   }
 
   return data as PreSignedUploadResponse;
@@ -149,7 +158,7 @@ async function uploadViaLegacyEndpoint(
 
   const data = await parseErrorResponse(res);
   if (!res.ok) {
-    throw new Error(data.message || data.error || `Upload failed (${res.status})`);
+    throw new Error(getResponseErrorMessage(data, `Upload failed (${res.status})`));
   }
 
   const publicUrl = data.url || data.fileUrl || data.publicUrl || data.result?.url || data.data?.url || data.path;
