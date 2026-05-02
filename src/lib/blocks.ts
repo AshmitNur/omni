@@ -4,8 +4,10 @@
  * Docs: https://docs.seliseblocks.com/reference
  */
 
-const API_BASE = import.meta.env.VITE_BLOCKS_API_URL || 'https://api.seliseblocks.com';
-const X_BLOCKS_KEY = import.meta.env.VITE_X_BLOCKS_KEY || 'f44b9e7d-7c65-4783-a360-14a7df36674e';
+import { BLOCKS_API_BASE, BLOCKS_PROJECT_KEY, MCP_PROXY_URL } from './config';
+
+const API_BASE = BLOCKS_API_BASE;
+const X_BLOCKS_KEY = BLOCKS_PROJECT_KEY;
 
 // ─── Token storage keys ────────────────────────────────────────
 const ACCESS_TOKEN_KEY  = 'omni_access_token';
@@ -64,6 +66,36 @@ function cacheUser(user: BlocksUser) {
   localStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
 }
 
+function isAuthRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readUserString(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (value !== undefined && value !== null) return String(value);
+  }
+  return '';
+}
+
+function normalizeUser(data: unknown): BlocksUser {
+  const record = isAuthRecord(data) ? data : {};
+  const firstName = readUserString(record, ['firstName', 'FirstName']);
+  const lastName = readUserString(record, ['lastName', 'LastName']);
+  const userName = readUserString(record, ['userName', 'UserName']);
+  const email = readUserString(record, ['email', 'Email']);
+
+  return {
+    itemId: readUserString(record, ['itemId', 'id', 'ItemId', 'Id', 'userName', 'UserName']),
+    email,
+    userName,
+    firstName,
+    lastName,
+    displayName: `${firstName} ${lastName}`.trim() || userName || email,
+    profileImageUrl: readUserString(record, ['profileImageUrl', 'ProfileImageUrl']) || undefined,
+  };
+}
+
 async function parseAuthError(res: Response, fallback: string) {
   const text = await res.text();
   if (!text) return fallback;
@@ -90,11 +122,10 @@ export async function loginWithPassword(email: string, password: string): Promis
     password,
   };
 
-  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
-  if (proxyUrl) {
+  if (MCP_PROXY_URL) {
     try {
       console.log('[OMNI] Attempting login via MCP Proxy...');
-      const res = await fetch(`${proxyUrl}/proxy/token`, {
+      const res = await fetch(`${MCP_PROXY_URL}/proxy/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -104,7 +135,7 @@ export async function loginWithPassword(email: string, password: string): Promis
         storeTokens(data.access_token, data.refresh_token);
         return await fetchCurrentAccount();
       }
-    } catch (err) {
+    } catch {
       console.warn('[OMNI] Login proxy failed, falling back...');
     }
   }
@@ -141,16 +172,15 @@ export async function loginWithPassword(email: string, password: string): Promis
 export async function requestSignup(email: string): Promise<boolean> {
   const payload = { email, captchaCode: '' };
   
-  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
-  if (proxyUrl) {
+  if (MCP_PROXY_URL) {
     try {
-      const res = await fetch(`${proxyUrl}/proxy/signup`, {
+      const res = await fetch(`${MCP_PROXY_URL}/proxy/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (res.ok) return (await res.json()).isSuccess;
-    } catch (err) { /* fallback */ }
+    } catch { /* fallback */ }
   }
 
   const res = await fetch(`${API_BASE}/identifier/v1/People/Signup`, {
@@ -188,16 +218,15 @@ export async function activateAccount(
     code,
   };
 
-  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
-  if (proxyUrl) {
+  if (MCP_PROXY_URL) {
     try {
-      const res = await fetch(`${proxyUrl}/proxy/activate`, {
+      const res = await fetch(`${MCP_PROXY_URL}/proxy/activate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (res.ok) return true;
-    } catch (err) { /* fallback */ }
+    } catch { /* fallback */ }
   }
 
   const res = await fetch(`${API_BASE}/idp/v1/Iam/Activate`, {
@@ -252,10 +281,9 @@ export async function refreshAccessToken(): Promise<boolean> {
 
 // ─── IAM: Get current user account ─────────────────────────────
 export async function fetchCurrentAccount(): Promise<BlocksUser> {
-  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
-  if (proxyUrl) {
+  if (MCP_PROXY_URL) {
     try {
-      const res = await fetch(`${proxyUrl}/proxy/iam-account`, {
+      const res = await fetch(`${MCP_PROXY_URL}/proxy/iam-account`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${getAccessToken()}`
@@ -267,7 +295,7 @@ export async function fetchCurrentAccount(): Promise<BlocksUser> {
         cacheUser(user);
         return user;
       }
-    } catch (err) { /* fallback */ }
+    } catch { /* fallback */ }
   }
 
   const res = await fetch(`${API_BASE}/idp/v1/Iam/GetAccount`, {
@@ -280,16 +308,7 @@ export async function fetchCurrentAccount(): Promise<BlocksUser> {
   }
 
   const data = await res.json();
-
-  const user: BlocksUser = {
-    itemId: data.itemId || data.id || data.ItemId || data.Id || data.userName || '',
-    email: data.email || '',
-    userName: data.userName || '',
-    firstName: data.firstName || '',
-    lastName: data.lastName || '',
-    displayName: `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.userName || data.email,
-    profileImageUrl: data.profileImageUrl,
-  };
+  const user = normalizeUser(data);
 
   cacheUser(user);
   return user;

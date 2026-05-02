@@ -8,9 +8,10 @@
  */
 
 import { getAccessToken } from './blocks';
+import { BLOCKS_API_BASE, BLOCKS_PROJECT_KEY, MCP_PROXY_URL } from './config';
 
-const API_BASE = import.meta.env.VITE_BLOCKS_API_URL || 'https://api.seliseblocks.com';
-const X_BLOCKS_KEY = import.meta.env.VITE_X_BLOCKS_KEY || '';
+const API_BASE = BLOCKS_API_BASE;
+const X_BLOCKS_KEY = BLOCKS_PROJECT_KEY;
 const STORAGE_CONFIGURATIONS = String(
   import.meta.env.VITE_BLOCKS_STORAGE_CONFIGURATIONS ||
     import.meta.env.VITE_BLOCKS_STORAGE_CONFIGURATION ||
@@ -89,15 +90,24 @@ async function parseErrorResponse(res: Response) {
   }
 }
 
-function getResponseErrorMessage(data: any, fallback: string) {
+function isResponseRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getResponseErrorMessage(data: unknown, fallback: string) {
   if (!data) return fallback;
   if (typeof data === 'string') return data;
-  if (data.message || data.error || data.error_description) {
-    return data.message || data.error || data.error_description;
+  if (!isResponseRecord(data)) return fallback;
+
+  const message = data.message || data.error || data.error_description;
+  if (message) {
+    return String(message);
   }
   if (data.errors) {
     if (Array.isArray(data.errors)) {
-      return data.errors.map((error: any) => error?.message || String(error)).join(' ');
+      return data.errors
+        .map((error) => (isResponseRecord(error) && error.message ? String(error.message) : String(error)))
+        .join(' ');
     }
     if (typeof data.errors === 'object') {
       return Object.values(data.errors).join(' ');
@@ -301,12 +311,11 @@ export async function uploadMedia(
   onProgress?.(0);
 
   // Strategy 0: Use MCP Proxy to bypass CORS
-  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
-  if (proxyUrl) {
+  if (MCP_PROXY_URL) {
     try {
       console.log('[Media] Attempting upload via MCP Proxy...');
       const dataUrl = await fileToDataUrl(file);
-      const res = await fetch(`${proxyUrl}/proxy/upload`, {
+      const res = await fetch(`${MCP_PROXY_URL}/proxy/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

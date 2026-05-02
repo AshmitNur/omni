@@ -8,10 +8,11 @@
 
 import type { VibeComponentData } from '../components/builder/registry';
 import { getAccessToken, refreshAccessToken } from './blocks';
+import { BLOCKS_API_BASE, BLOCKS_PROJECT_KEY, BLOCKS_PROJECT_SLUG, MCP_PROXY_URL } from './config';
 
-const API_BASE = import.meta.env.VITE_BLOCKS_API_URL || 'https://api.seliseblocks.com';
-const X_BLOCKS_KEY = import.meta.env.VITE_X_BLOCKS_KEY || 'f44b9e7d-7c65-4783-a360-14a7df36674e';
-const PROJECT_SLUG = import.meta.env.VITE_PROJECT_SLUG || 'dryzkn';
+const API_BASE = BLOCKS_API_BASE;
+const X_BLOCKS_KEY = BLOCKS_PROJECT_KEY;
+const PROJECT_SLUG = BLOCKS_PROJECT_SLUG;
 
 const CONTENT_TYPE = import.meta.env.VITE_CONTENT_TYPE || 'vibe_site';
 const CONTENT_API_BASE = (
@@ -57,6 +58,17 @@ export interface VibeSiteContent {
   updatedAt?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+interface InventoryMutationResult {
+  insertInventoryItem?: {
+    itemId?: string;
+    acknowledged?: boolean;
+  };
+  updateInventoryItem?: {
+    itemId?: string;
+    acknowledged?: boolean;
+  };
 }
 
 function isRecord(value: unknown): value is ContentRecord {
@@ -494,11 +506,10 @@ export async function upsertInventorySiteContent(
   console.log(`[OMNI] Starting site upsert for user: ${ownerId} (${username})`);
 
   // Strategy 0: Use MCP Proxy to bypass CORS for content
-  const proxyUrl = import.meta.env.VITE_MCP_PROXY_URL;
-  if (proxyUrl) {
+  if (MCP_PROXY_URL) {
     try {
       console.log('[OMNI] Attempting site sync via MCP Proxy...');
-      const proxyRes = await fetch(`${proxyUrl}/proxy/upsert-site`, {
+      const proxyRes = await fetch(`${MCP_PROXY_URL}/proxy/upsert-site`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ownerId, username, siteData })
@@ -531,7 +542,7 @@ export async function upsertInventorySiteContent(
   try {
     if (existing?.itemId) {
       console.log(`[OMNI] Existing site found (${existing.itemId}). Updating...`);
-      const response = await postGraphql<any>(
+      const response = await postGraphql<InventoryMutationResult>(
         `mutation UpdateVibeSite($itemId: String!, $input: InventoryItemInput!) {
           updateInventoryItem(itemId: $itemId, input: $input) {
             itemId
@@ -553,7 +564,7 @@ export async function upsertInventorySiteContent(
       };
     } else {
       console.log('[OMNI] No existing site. Inserting new record...');
-      const response = await postGraphql<any>(
+      const response = await postGraphql<InventoryMutationResult>(
         `mutation InsertVibeSite($input: InventoryItemInput!) {
           insertInventoryItem(input: $input) {
             itemId
@@ -615,7 +626,9 @@ export async function upsertSiteContent(
   siteData: Partial<VibeSiteData>
 ): Promise<VibeSiteContent> {
   try {
-    return await upsertInventorySiteContent(ownerId, username, siteData);
+    const inventoryRecord = await upsertInventorySiteContent(ownerId, username, siteData);
+    if (inventoryRecord) return inventoryRecord;
+    throw new Error('Data Gateway content sync returned no site record.');
   } catch (gatewayError) {
     console.warn('Data Gateway content sync failed, trying Content API fallback.', gatewayError);
     const payload = buildContentPayload(ownerId, username, siteData);
