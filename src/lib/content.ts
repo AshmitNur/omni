@@ -15,9 +15,6 @@ const X_BLOCKS_KEY = BLOCKS_PROJECT_KEY;
 const PROJECT_SLUG = BLOCKS_PROJECT_SLUG;
 
 const CONTENT_TYPE = import.meta.env.VITE_CONTENT_TYPE || 'vibe_site';
-const CONTENT_API_BASE = (
-  import.meta.env.VITE_CONTENT_API_BASE || `${API_BASE}/cms/v1/Content`
-).replace(/\/$/, '');
 const GRAPHQL_API_BASE = (
   import.meta.env.VITE_BLOCKS_GRAPHQL_API_BASE ||
   `${API_BASE}/uds/v1/${PROJECT_SLUG}/gateway`
@@ -149,32 +146,6 @@ async function parseResponse(res: Response): Promise<unknown> {
   }
 }
 
-async function postContent(
-  action: string,
-  payload: Record<string, unknown>,
-  includeAuth = true,
-  retryAuth = true
-): Promise<unknown | null> {
-  const res = await fetch(`${CONTENT_API_BASE}/${action}`, {
-    method: 'POST',
-    headers: getHeaders(includeAuth),
-    credentials: getRequestCredentials(),
-    body: JSON.stringify(payload),
-  });
-
-  const data = await parseResponse(res);
-  if (includeAuth && retryAuth && (res.status === 401 || isAuthError(data))) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) return postContent(action, payload, includeAuth, false);
-  }
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    throw createContentError(`Content ${action} failed`, res.status, data);
-  }
-
-  return data;
-}
-
 async function postGraphql<T>(
   query: string,
   variables: Record<string, unknown> = {},
@@ -204,32 +175,6 @@ async function postGraphql<T>(
   }
 
   return (isRecord(data) ? data.data : data) as T;
-}
-
-function unwrapContentResponse(data: unknown): unknown | null {
-  if (!data) return null;
-  if (Array.isArray(data)) return data[0] ?? null;
-  if (!isRecord(data)) return data;
-
-  const candidates = [
-    data.data,
-    data.result,
-    data.item,
-    data.content,
-    data.value,
-    data.payload,
-    data,
-  ];
-
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    if (Array.isArray(candidate)) return candidate[0] ?? null;
-    if (isRecord(candidate) && Array.isArray(candidate.items)) return candidate.items[0] ?? null;
-    if (isRecord(candidate) && Array.isArray(candidate.data)) return candidate.data[0] ?? null;
-    return candidate;
-  }
-
-  return null;
 }
 
 export function slugify(value: string | undefined | null, fallback = 'site') {
@@ -590,36 +535,6 @@ export async function upsertInventorySiteContent(
   }
 }
 
-function normalizeContentRecord(record: unknown): VibeSiteContent | null {
-  const unwrapped = unwrapContentResponse(record);
-  if (!isRecord(unwrapped)) return null;
-
-  const rawData = readRecord(unwrapped, ['data', 'Data', 'payload', 'Payload']) || unwrapped;
-  const slug = slugify(
-    readString(unwrapped, ['slug', 'Slug']) || readString(rawData, ['publicSlug', 'username']),
-    'site'
-  );
-  const ownerId = readString(unwrapped, ['ownerId', 'userId', 'UserId']) || readString(rawData, ['ownerId']) || '';
-  const data = normalizeSiteData(rawData, slug);
-  const isPublishedValue = readField(unwrapped, ['isPublished', 'IsPublished']);
-
-  return {
-    itemId: readString(unwrapped, ['itemId', 'ItemId', 'id']),
-    contentType: readString(unwrapped, ['contentType', 'ContentType']) || CONTENT_TYPE,
-    ownerId,
-    userId: readString(unwrapped, ['userId', 'UserId']) || ownerId,
-    username: slug,
-    slug,
-    data,
-    isPublished: typeof isPublishedValue === 'boolean' ? isPublishedValue : true,
-    projectSlug: readString(unwrapped, ['projectSlug', 'ProjectSlug']) || PROJECT_SLUG,
-    createdAt: readString(unwrapped, ['createdAt', 'CreatedAt']),
-    updatedAt: readString(unwrapped, ['updatedAt', 'UpdatedAt']),
-    created_at: readString(unwrapped, ['created_at']),
-    updated_at: readString(unwrapped, ['updated_at']),
-  };
-}
-
 export async function upsertSiteContent(
   ownerId: string,
   username: string,
@@ -636,27 +551,9 @@ export async function getSiteContentByOwner(ownerId: string): Promise<VibeSiteCo
     const inventoryRecord = await getInventorySiteByOwner(ownerId);
     if (inventoryRecord) return inventoryRecord;
   } catch (gatewayError) {
-    console.warn('Data Gateway content load failed, trying Content API fallback.', gatewayError);
+    console.warn('Data Gateway content load failed.', gatewayError);
   }
-
-  try {
-    const data = await postContent(
-      'GetByOwner',
-      {
-        contentType: CONTENT_TYPE,
-        ownerId,
-        userId: ownerId,
-        projectKey: X_BLOCKS_KEY,
-        projectSlug: PROJECT_SLUG,
-      },
-      true
-    );
-
-    return normalizeContentRecord(data);
-  } catch (contentError) {
-    console.warn('Content API owner lookup failed.', contentError);
-    return null;
-  }
+  return null;
 }
 
 export async function getSiteContentBySlug(slug: string): Promise<VibeSiteContent | null> {
@@ -674,28 +571,9 @@ export async function getSiteContentBySlug(slug: string): Promise<VibeSiteConten
         console.warn('Authenticated Data Gateway slug lookup failed.', authenticatedGatewayError);
       }
     }
-    console.warn('Public Data Gateway slug lookup failed, trying Content API fallback.', gatewayError);
+    console.warn('Public Data Gateway slug lookup failed.', gatewayError);
   }
-
-  try {
-    const data = await postContent(
-      'GetBySlug',
-      {
-        contentType: CONTENT_TYPE,
-        slug: publicSlug,
-        username: publicSlug,
-        isPublished: true,
-        projectKey: X_BLOCKS_KEY,
-        projectSlug: PROJECT_SLUG,
-      },
-      false
-    );
-
-    return normalizeContentRecord(data);
-  } catch (contentError) {
-    console.warn('Content API slug lookup failed.', contentError);
-    return null;
-  }
+  return null;
 }
 
 export async function ensureSiteContent(
