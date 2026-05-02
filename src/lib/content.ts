@@ -480,24 +480,6 @@ async function getInventorySiteBySlug(slug: string, includeAuth: boolean): Promi
   return normalizeInventorySiteRecord(data.getInventoryItems?.items?.[0]);
 }
 
-async function upsertInventorySiteContent(
-  ownerId: string,
-  username: string,
-  siteData: Partial<VibeSiteData>
-): Promise<VibeSiteContent> {
-  if (!ownerId) throw new Error("Owner ID is required for persistence");
-  type InsertResponse = {
-    insertInventoryItem?: {
-      itemId?: string;
-      acknowledged?: boolean;
-    };
-  };
-  type UpdateResponse = {
-    updateInventoryItem?: {
-      itemId?: string;
-      acknowledged?: boolean;
-    };
-  };
 
 export async function upsertInventorySiteContent(
   ownerId: string,
