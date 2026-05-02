@@ -31,81 +31,11 @@ export async function uploadMedia(
   formData.append('isPublic', 'true');
 
   // Some Selise Storage services reject Authorization headers on public uploads.
-  // We will try using ONLY the x-blocks-key first.
   const headers: Record<string, string> = {
     'x-blocks-key': X_BLOCKS_KEY,
   };
-  // If we wanted to include token, we would: if (token) headers['Authorization'] = `Bearer ${token}`;
-  // But for now, we leave it out to fix CORS preflight issues.
-  // Do NOT set Content-Type; browser sets it automatically with boundary for FormData
 
-  // If we need progress tracking, use XMLHttpRequest
-  if (onProgress) {
-    return new Promise<MediaUploadResult>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${API_BASE}/storage/v1/Documents/Upload`);
-      
-      Object.entries(headers).forEach(([key, value]) => {
-        xhr.setRequestHeader(key, value);
-      });
-
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          onProgress(Math.round((e.loaded / e.total) * 100));
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            // Support multiple possible response structures
-            const publicUrl = data.url || data.fileUrl || data.publicUrl || data.result?.url || data.data?.url || data.path;
-            
-            if (!publicUrl) {
-              console.error("Selise Media Upload Success but no URL found in response:", data);
-              reject(new Error('Upload succeeded but no public URL was returned.'));
-              return;
-            }
-
-            resolve({
-              url: publicUrl.startsWith('http') ? publicUrl : `${API_BASE}${publicUrl}`,
-              fileName: data.fileName || file.name,
-              fileSize: data.fileSize || file.size,
-              mimeType: data.mimeType || file.type,
-              itemId: data.itemId,
-            });
-          } catch (err) {
-            console.error("Failed to parse Selise Media response:", xhr.responseText);
-            reject(new Error('Invalid JSON response from media server.'));
-          }
-        } else {
-          console.error(`Selise Media Upload Failed (${xhr.status}):`, xhr.responseText);
-          try {
-            const errData = JSON.parse(xhr.responseText);
-            reject(new Error(errData.message || errData.error || `Upload failed with status ${xhr.status}`));
-          } catch {
-            reject(new Error(`Upload failed with status ${xhr.status}`));
-          }
-        }
-      };
-
-      xhr.onerror = () => {
-        console.error("Network error during Selise Media Upload. This is likely a CORS issue or incorrect endpoint.");
-        reject(new Error('Network error. The storage service might be blocking this request (CORS) or the endpoint is incorrect.'));
-      };
-      
-      // Try Files/Upload instead of Documents/Upload
-      xhr.open('POST', `${API_BASE}/storage/v1/Files/Upload`);
-      Object.entries(headers).forEach(([key, value]) => {
-        xhr.setRequestHeader(key, value);
-      });
-      
-      xhr.send(formData);
-    });
-  }
-
-  // Simple fetch for when progress is not needed
+  // Using fetch for better CORS compatibility and simplicity
   const res = await fetch(`${API_BASE}/storage/v1/Files/Upload`, {
     method: 'POST',
     headers,
@@ -114,7 +44,7 @@ export async function uploadMedia(
 
   if (!res.ok) {
     const text = await res.text();
-    console.error(`Selise Media Upload (fetch) Failed (${res.status}):`, text);
+    console.error(`Selise Media Upload Failed (${res.status}):`, text);
     try {
       const errData = JSON.parse(text);
       throw new Error(errData.message || errData.error || `Upload failed (${res.status})`);
@@ -127,11 +57,20 @@ export async function uploadMedia(
   const publicUrl = data.url || data.fileUrl || data.publicUrl || data.result?.url || data.data?.url || data.path;
   
   if (!publicUrl) {
+    console.error("Upload succeeded but no URL found in response:", data);
     throw new Error('Upload succeeded but no public URL was returned.');
   }
 
+  // If the path is relative, prefix it with the API_BASE
+  const finalUrl = publicUrl.startsWith('http') 
+    ? publicUrl 
+    : (API_BASE.startsWith('http') ? `${API_BASE}${publicUrl}` : `${window.location.origin}${API_BASE}${publicUrl}`);
+
+  // Fake progress completion for UI
+  if (onProgress) onProgress(100);
+
   return {
-    url: publicUrl.startsWith('http') ? publicUrl : `${API_BASE}${publicUrl}`,
+    url: finalUrl,
     fileName: data.fileName || file.name,
     fileSize: data.fileSize || file.size,
     mimeType: data.mimeType || file.type,
