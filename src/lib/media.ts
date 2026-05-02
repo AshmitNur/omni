@@ -30,16 +30,17 @@ export async function uploadMedia(
   formData.append('folder', folder);
   formData.append('isPublic', 'true');
 
-  // Some Selise Storage services reject Authorization headers on public uploads.
-  const headers: Record<string, string> = {
-    'x-blocks-key': X_BLOCKS_KEY,
-  };
+  // Move project key to query param to avoid custom headers (triggers CORS preflight)
+  const uploadUrl = new URL(`${API_BASE}/storage/v1/Files/Upload`);
+  uploadUrl.searchParams.append('projectKey', X_BLOCKS_KEY);
+  uploadUrl.searchParams.append('folder', folder);
+  uploadUrl.searchParams.append('isPublic', 'true');
 
-  // Using fetch for better CORS compatibility and simplicity
-  const res = await fetch(`${API_BASE}/storage/v1/Files/Upload`, {
+  // Using fetch with NO custom headers to try and trigger a "Simple Request" (no preflight)
+  const res = await fetch(uploadUrl.toString(), {
     method: 'POST',
-    headers,
     body: formData,
+    // Note: Do NOT add headers here if we want to bypass preflight
   });
 
   if (!res.ok) {
