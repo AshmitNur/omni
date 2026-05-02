@@ -625,16 +625,9 @@ export async function upsertSiteContent(
   username: string,
   siteData: Partial<VibeSiteData>
 ): Promise<VibeSiteContent> {
-  try {
-    const inventoryRecord = await upsertInventorySiteContent(ownerId, username, siteData);
-    if (inventoryRecord) return inventoryRecord;
-    throw new Error('Data Gateway content sync returned no site record.');
-  } catch (gatewayError) {
-    console.warn('Data Gateway content sync failed, trying Content API fallback.', gatewayError);
-    const payload = buildContentPayload(ownerId, username, siteData);
-    const data = await postContent('Upsert', payload, true);
-    return normalizeContentRecord(data || payload) || (payload as VibeSiteContent);
-  }
+  const inventoryRecord = await upsertInventorySiteContent(ownerId, username, siteData);
+  if (inventoryRecord) return inventoryRecord;
+  throw new Error('Data Gateway content sync returned no site record.');
 }
 
 export async function getSiteContentByOwner(ownerId: string): Promise<VibeSiteContent | null> {

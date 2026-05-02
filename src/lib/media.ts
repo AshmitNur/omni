@@ -7,7 +7,7 @@
  * 3. Store the clean public URL in Content Block site JSON.
  */
 
-import { getAccessToken } from './blocks';
+import { getAccessToken, getCachedUser } from './blocks';
 import { BLOCKS_API_BASE, BLOCKS_PROJECT_KEY, MCP_PROXY_URL } from './config';
 
 const API_BASE = BLOCKS_API_BASE;
@@ -44,6 +44,9 @@ interface PreSignedUploadResponse {
   isSuccess?: boolean;
   uploadUrl?: string;
   fileId?: string;
+  itemId?: string;
+  fileStorageId?: string;
+  configurationName?: string;
 }
 
 interface UploadCandidate {
@@ -216,7 +219,12 @@ async function getPreSignedUrl(file: File): Promise<PreSignedUploadResponse> {
   for (const candidate of candidates) {
     try {
       const data = await requestPreSignedUrl(file, candidate);
-      if (data.isSuccess && data.uploadUrl) return data;
+      if (data.isSuccess && data.uploadUrl) {
+        return {
+          ...data,
+          configurationName: data.configurationName || candidate.configurationName,
+        };
+      }
 
       const details = data.errors ? Object.values(data.errors).join(' ') : 'No upload URL returned';
       errors.push(
@@ -232,6 +240,56 @@ async function getPreSignedUrl(file: File): Promise<PreSignedUploadResponse> {
   }
 
   throw new Error(`Pre-signed upload URL failed. ${errors.join(' | ')}`);
+}
+
+async function finalizeUploadFile(file: File, upload: PreSignedUploadResponse, folder: string) {
+  const fileStorageId = upload.fileStorageId || upload.fileId || upload.itemId;
+  if (!fileStorageId) return;
+
+  const user = getCachedUser();
+  const payload = {
+    upload: [
+      {
+        userId: user?.itemId || '',
+        itemId: upload.itemId || '',
+        artifactName: file.name,
+        configurationName: upload.configurationName || STORAGE_CONFIGURATIONS[0] || 'Default',
+        description: `OMNI ${folder} upload`,
+        parentId: '',
+        dmsWorkspaceId: '',
+        dmsWorkspaceName: '',
+        tags: [folder],
+        metaData: {
+          mimeType: {
+            type: 'string',
+            value: file.type || 'application/octet-stream',
+          },
+          fileSize: {
+            type: 'number',
+            value: String(file.size),
+          },
+        },
+        organizationId: '',
+        fileStorageId,
+      },
+    ],
+    projectKey: X_BLOCKS_KEY,
+  };
+
+  const res = await fetch(`${API_BASE}/uds/v1/Files/UploadFile`, {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders(),
+      accept: 'text/plain',
+    },
+    credentials: getRequestCredentials(),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await parseErrorResponse(res);
+  if (!res.ok) {
+    throw new Error(getResponseErrorMessage(data, `UploadFile failed (${res.status})`));
+  }
 }
 
 function uploadToSignedUrl(
@@ -353,6 +411,7 @@ export async function uploadMedia(
     }
 
     const publicUrl = await uploadToSignedUrl(preSigned.uploadUrl, file, onProgress);
+    await finalizeUploadFile(file, preSigned, folder);
     return {
       url: publicUrl,
       fileName: file.name,
