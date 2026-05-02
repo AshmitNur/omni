@@ -208,11 +208,6 @@ export async function activateAccount(
     },
     body: JSON.stringify(payload),
   });
-      code,
-      captchaCode: '',
-      projectKey: X_BLOCKS_KEY,
-    }),
-  });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
