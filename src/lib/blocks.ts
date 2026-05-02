@@ -64,25 +64,53 @@ function cacheUser(user: BlocksUser) {
   localStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
 }
 
+async function parseAuthError(res: Response, fallback: string) {
+  const text = await res.text();
+  if (!text) return fallback;
+
+  try {
+    const err = JSON.parse(text);
+    return err.error_description || err.message || err.error || fallback;
+  } catch {
+    return text || fallback;
+  }
+}
+
+function createTokenBody(values: Record<string, string>) {
+  const body = new URLSearchParams();
+  Object.entries(values).forEach(([key, value]) => body.set(key, value));
+  return body;
+}
+
 // ─── Auth: Login (Password Grant) ──────────────────────────────
 export async function loginWithPassword(email: string, password: string): Promise<BlocksUser> {
-  const body = new FormData();
-  body.append('grant_type', 'password');
-  body.append('username', email);
-  body.append('password', password);
+  const body = createTokenBody({
+    grant_type: 'password',
+    username: email.trim(),
+    password,
+  });
 
   const res = await fetch(`${API_BASE}/idp/v1/Authentication/Token`, {
     method: 'POST',
-    headers: { 'x-blocks-key': X_BLOCKS_KEY },
-    body,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'x-blocks-key': X_BLOCKS_KEY,
+    },
+    body: body.toString(),
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error_description || err.error || 'Login failed');
+    throw new Error(await parseAuthError(res, 'Login failed'));
   }
 
   const data = await res.json();
+  if (data.enable_mfa) {
+    throw new Error('MFA is required for this account. MFA verification is not implemented in this build yet.');
+  }
+  if (!data.access_token) {
+    throw new Error(data.error_description || data.error || 'Login did not return an access token');
+  }
+
   storeTokens(data.access_token, data.refresh_token);
 
   // Fetch user profile after login
@@ -153,14 +181,18 @@ export async function refreshAccessToken(): Promise<boolean> {
   const rt = getRefreshToken();
   if (!rt) return false;
 
-  const body = new FormData();
-  body.append('grant_type', 'refresh_token');
-  body.append('refresh_token', rt);
+  const body = createTokenBody({
+    grant_type: 'refresh_token',
+    refresh_token: rt,
+  });
 
   const res = await fetch(`${API_BASE}/idp/v1/Authentication/Token`, {
     method: 'POST',
-    headers: { 'x-blocks-key': X_BLOCKS_KEY },
-    body,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'x-blocks-key': X_BLOCKS_KEY,
+    },
+    body: body.toString(),
   });
 
   if (!res.ok) {
