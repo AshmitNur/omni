@@ -177,6 +177,28 @@ async function postGraphql<T>(
   return (isRecord(data) ? data.data : data) as T;
 }
 
+function getProxyAuthHeaders(includeAuth = true) {
+  const token = includeAuth ? getAccessToken() : null;
+  return token ? { Authorization: `Bearer ${token}` } : undefined;
+}
+
+async function getProxyInventorySite(
+  params: { ownerId: string } | { slug: string },
+  includeAuth = true
+): Promise<VibeSiteContent | null> {
+  if (!MCP_PROXY_URL) return null;
+  const searchParams = new URLSearchParams(params);
+  const res = await fetch(`${MCP_PROXY_URL}/proxy/site-content?${searchParams.toString()}`, {
+    headers: getProxyAuthHeaders(includeAuth),
+  });
+  const data = await parseResponse(res);
+  if (!res.ok) {
+    throw createContentError('Proxy content load failed', res.status, data);
+  }
+  if (!isRecord(data)) return null;
+  return normalizeInventorySiteRecord(data.item);
+}
+
 export function slugify(value: string | undefined | null, fallback = 'site') {
   const slug = String(value || '')
     .trim()
@@ -298,6 +320,17 @@ function decodeSiteData(chunks: unknown, fallback: VibeSiteData) {
   }
 }
 
+function decodeLegacySiteDescription(description: unknown, fallback: VibeSiteData) {
+  if (typeof description !== 'string' || !description.trim()) return fallback;
+  try {
+    const parsed = JSON.parse(description) as unknown;
+    if (isRecord(parsed) && isRecord(parsed.data)) return parsed.data as VibeSiteData;
+    return parsed as VibeSiteData;
+  } catch {
+    return fallback;
+  }
+}
+
 function buildInventoryContentInput(ownerId: string, username: string, siteData: Partial<VibeSiteData>) {
   const payload = buildContentPayload(ownerId, username, siteData);
 
@@ -336,7 +369,8 @@ function normalizeInventorySiteRecord(record: unknown): VibeSiteContent | null {
     },
     username
   );
-  const data = normalizeSiteData(decodeSiteData(record.ItemImageFileIds, fallbackData), username);
+  const chunkData = decodeSiteData(record.ItemImageFileIds, fallbackData);
+  const data = normalizeSiteData(decodeLegacySiteDescription(record.ItemDescription, chunkData), username);
 
   return {
     itemId: readString(record, ['ItemId']),
@@ -374,6 +408,7 @@ async function getInventorySiteByOwner(ownerId: string): Promise<VibeSiteContent
           Tags
           ItemImageFileId
           ItemImageFileIds
+          ItemDescription
           CreatedDate
           LastUpdatedDate
         }
@@ -418,6 +453,7 @@ async function getInventorySiteBySlug(slug: string, includeAuth: boolean): Promi
           Tags
           ItemImageFileId
           ItemImageFileIds
+          ItemDescription
           CreatedDate
           LastUpdatedDate
         }
@@ -456,7 +492,10 @@ export async function upsertInventorySiteContent(
       console.log('[OMNI] Attempting site sync via MCP Proxy...');
       const proxyRes = await fetch(`${MCP_PROXY_URL}/proxy/upsert-site`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
+        },
         body: JSON.stringify({ ownerId, username, siteData })
       });
 
@@ -547,6 +586,14 @@ export async function upsertSiteContent(
 
 export async function getSiteContentByOwner(ownerId: string): Promise<VibeSiteContent | null> {
   if (!ownerId) return null;
+  if (MCP_PROXY_URL) {
+    try {
+      const proxyRecord = await getProxyInventorySite({ ownerId }, true);
+      if (proxyRecord) return proxyRecord;
+    } catch (proxyError) {
+      console.warn('Proxy content load failed.', proxyError);
+    }
+  }
   try {
     const inventoryRecord = await getInventorySiteByOwner(ownerId);
     if (inventoryRecord) return inventoryRecord;
@@ -558,6 +605,23 @@ export async function getSiteContentByOwner(ownerId: string): Promise<VibeSiteCo
 
 export async function getSiteContentBySlug(slug: string): Promise<VibeSiteContent | null> {
   const publicSlug = slugify(slug, 'site');
+  if (MCP_PROXY_URL) {
+    try {
+      const proxyRecord = await getProxyInventorySite({ slug: publicSlug }, false);
+      if (proxyRecord) return proxyRecord;
+    } catch (proxyError) {
+      const token = getAccessToken();
+      if (token) {
+        try {
+          const authenticatedProxyRecord = await getProxyInventorySite({ slug: publicSlug }, true);
+          if (authenticatedProxyRecord) return authenticatedProxyRecord;
+        } catch (authenticatedProxyError) {
+          console.warn('Authenticated proxy slug lookup failed.', authenticatedProxyError);
+        }
+      }
+      console.warn('Proxy public slug lookup failed.', proxyError);
+    }
+  }
   try {
     const inventoryRecord = await getInventorySiteBySlug(publicSlug, false);
     if (inventoryRecord) return inventoryRecord;

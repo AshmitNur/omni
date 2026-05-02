@@ -25,6 +25,93 @@ const getHeaders = (token?: string) => ({
   ...(token ? { Authorization: `Bearer ${token}` } : {}),
 });
 
+const INVENTORY_CHUNK_SIZE = 2500;
+const INVENTORY_CONTENT_CATEGORY = "VibeSite";
+const INVENTORY_CONTENT_TAG = "vibe-site";
+
+type SiteDataInput = Record<string, unknown>;
+
+function isRecord(value: unknown): value is SiteDataInput {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function slugify(value: string | undefined | null, fallback = "site") {
+  const slug = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug || fallback;
+}
+
+function normalizeSiteData(siteData: unknown, username: string) {
+  const now = new Date().toISOString();
+  const publicSlug = slugify(username, "site");
+  const record = isRecord(siteData) ? siteData : {};
+  return {
+    ...record,
+    siteName: typeof record.siteName === "string" && record.siteName ? record.siteName : "My Vibe Site",
+    username: publicSlug,
+    publicSlug,
+    pages: Array.isArray(record.pages) ? record.pages : [],
+    publishedAt: typeof record.publishedAt === "string" && record.publishedAt ? record.publishedAt : now,
+    updatedAt: now,
+  };
+}
+
+function encodeSiteData(data: unknown) {
+  const serialized = JSON.stringify(data);
+  const chunks: string[] = [];
+  for (let index = 0; index < serialized.length; index += INVENTORY_CHUNK_SIZE) {
+    chunks.push(serialized.slice(index, index + INVENTORY_CHUNK_SIZE));
+  }
+  return chunks;
+}
+
+function buildInventoryContentInput(ownerId: string, username: string, siteData: unknown, existingId?: string) {
+  const now = new Date().toISOString();
+  const publicSlug = slugify(username, ownerId || "user");
+  const siteDataRecord = isRecord(siteData) ? siteData : {};
+  const data = normalizeSiteData(siteData, publicSlug);
+  const payload = {
+    contentType: process.env.VITE_CONTENT_TYPE || "vibe_site",
+    ownerId,
+    userId: ownerId,
+    username: publicSlug,
+    slug: publicSlug,
+    title: data.siteName,
+    isPublished: true,
+    projectKey: X_BLOCKS_KEY,
+    projectSlug: PROJECT_SLUG,
+    data,
+    created_at: typeof siteDataRecord.created_at === "string" && siteDataRecord.created_at ? siteDataRecord.created_at : now,
+    updated_at: now,
+  };
+
+  return {
+    ...(existingId ? { ItemId: existingId } : {}),
+    ItemName: `${INVENTORY_CONTENT_TAG}:${payload.slug}`,
+    Category: INVENTORY_CONTENT_CATEGORY,
+    Supplier: ownerId,
+    ItemLoc: payload.username,
+    Status: "Published",
+    Tags: [INVENTORY_CONTENT_TAG, payload.slug, ownerId],
+    ItemImageFileId: payload.slug,
+    ItemImageFileIds: encodeSiteData(payload),
+    ItemDescription: JSON.stringify(data),
+    Stock: 1,
+    Price: 0,
+    EligibleWarranty: false,
+    EligibleReplacement: false,
+    Discount: false,
+  };
+}
+
 // Tool: Get Site Content
 server.tool(
   "get_site_content",
@@ -141,6 +228,74 @@ app.post("/proxy/upload", async (req, res) => {
   }
 });
 
+// PROXY ROUTE: Site Content Read
+app.get("/proxy/site-content", async (req, res) => {
+  try {
+    const ownerId = typeof req.query.ownerId === "string" ? req.query.ownerId : "";
+    const slug = typeof req.query.slug === "string" ? slugify(req.query.slug, "site") : "";
+    if (!ownerId && !slug) return res.status(400).json({ error: "ownerId or slug is required" });
+
+    const authHeader = Array.isArray(req.headers.authorization)
+      ? req.headers.authorization[0]
+      : req.headers.authorization;
+    const bearerToken = authHeader?.replace(/^Bearer\s+/i, "");
+    const filter = ownerId
+      ? { Category: INVENTORY_CONTENT_CATEGORY, Supplier: ownerId }
+      : { Category: INVENTORY_CONTENT_CATEGORY, ItemLoc: slug };
+
+    const graphqlUrl = `${API_BASE}/uds/v1/${PROJECT_SLUG}/gateway`;
+    const query = `
+      query VibeInventorySite($input: DynamicQueryInput) {
+        getInventoryItems(input: $input) {
+          items {
+            ItemId
+            ItemName
+            Category
+            Supplier
+            ItemLoc
+            Status
+            Tags
+            ItemImageFileId
+            ItemImageFileIds
+            ItemDescription
+            CreatedDate
+            LastUpdatedDate
+          }
+        }
+      }
+    `;
+
+    const response = await fetch(graphqlUrl, {
+      method: "POST",
+      headers: getHeaders(bearerToken),
+      body: JSON.stringify({
+        query,
+        variables: {
+          input: {
+            filter: JSON.stringify(filter),
+            sort: JSON.stringify({ LastUpdatedDate: -1 }),
+            pageNo: 1,
+            pageSize: 1,
+          },
+        },
+      }),
+    });
+
+    const result = await response.json() as unknown;
+    if (!response.ok || (isRecord(result) && result.errors)) {
+      return res.status(response.ok ? 502 : response.status).json(result);
+    }
+
+    const data = isRecord(result) && isRecord(result.data) ? result.data : {};
+    const inventory = isRecord(data.getInventoryItems) ? data.getInventoryItems : {};
+    const items = Array.isArray(inventory.items) ? inventory.items : [];
+    res.status(200).json({ item: items[0] || null });
+  } catch (error) {
+    console.error("Proxy Site Read Error:", error);
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
 // PROXY ROUTE: Site Content Upsert
 app.post("/proxy/upsert-site", async (req, res) => {
   try {
@@ -148,6 +303,10 @@ app.post("/proxy/upsert-site", async (req, res) => {
     if (!ownerId) return res.status(400).json({ error: "ownerId is required" });
 
     const graphqlUrl = `${API_BASE}/uds/v1/${PROJECT_SLUG}/gateway`;
+    const authHeader = Array.isArray(req.headers.authorization)
+      ? req.headers.authorization[0]
+      : req.headers.authorization;
+    const bearerToken = authHeader?.replace(/^Bearer\s+/i, "");
     
     // 1. Check for existing item
     const checkQuery = `
@@ -159,19 +318,23 @@ app.post("/proxy/upsert-site", async (req, res) => {
     `;
     const checkRes = await fetch(graphqlUrl, {
       method: "POST",
-      headers: getHeaders(),
+      headers: getHeaders(bearerToken),
       body: JSON.stringify({
         query: checkQuery,
         variables: {
           input: {
-            filter: JSON.stringify({ Category: "VibeSite", Supplier: ownerId }),
+            filter: JSON.stringify({ Category: INVENTORY_CONTENT_CATEGORY, Supplier: ownerId }),
             pageNo: 1, pageSize: 1
           }
         }
       })
     });
-    const checkData: any = await checkRes.json();
-    const existingId = checkData.data?.getInventoryItems?.items?.[0]?.ItemId;
+    const checkData = await checkRes.json() as unknown;
+    const checkResultData = isRecord(checkData) && isRecord(checkData.data) ? checkData.data : {};
+    const checkInventory = isRecord(checkResultData.getInventoryItems) ? checkResultData.getInventoryItems : {};
+    const checkItems = Array.isArray(checkInventory.items) ? checkInventory.items : [];
+    const existingItem = isRecord(checkItems[0]) ? checkItems[0] : {};
+    const existingId = typeof existingItem.ItemId === "string" ? existingItem.ItemId : undefined;
 
     // 2. Perform Insert or Update
     const mutation = existingId 
@@ -182,17 +345,11 @@ app.post("/proxy/upsert-site", async (req, res) => {
           insertInventoryItem(input: $input) { itemId }
         }`;
 
-    const input = {
-      ItemName: `vibe-site:${username || 'user'}`,
-      Category: "VibeSite",
-      Supplier: ownerId,
-      ItemLoc: username || 'user',
-      ItemDescription: JSON.stringify(siteData)
-    };
+    const input = buildInventoryContentInput(ownerId, username || "user", siteData, existingId);
 
     const upsertRes = await fetch(graphqlUrl, {
       method: "POST",
-      headers: getHeaders(),
+      headers: getHeaders(bearerToken),
       body: JSON.stringify({
         query: mutation,
         variables: { itemId: existingId, input }
@@ -200,7 +357,7 @@ app.post("/proxy/upsert-site", async (req, res) => {
     });
 
     const result = await upsertRes.json();
-    res.status(200).json(result);
+    res.status(upsertRes.status).json(result);
   } catch (error: any) {
     console.error("Proxy Site Error:", error);
     res.status(500).json({ error: error.message });
