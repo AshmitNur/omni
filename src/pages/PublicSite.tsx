@@ -1,12 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
-import {
-  getPublicSitePath,
-  getSiteContentBySlug,
-  normalizePageSlug,
-  slugify,
-  type VibeSiteData,
-} from '../lib/content';
+import { getWebsiteBySlug, getPages, type Website, type Page } from '../lib/uds';
+import { getPublicSitePath, normalizePageSlug, slugify } from '../lib/content';
 import { RenderComponent } from '../components/builder/Renderer';
 import type { VibeComponentData } from '../components/builder/registry';
 import { motion } from 'framer-motion';
@@ -16,7 +9,8 @@ export default function PublicSite() {
   const location = useLocation();
   const username = params.username;
   const routePath = params['*'];
-  const [siteData, setSiteData] = useState<VibeSiteData | null>(null);
+  const [website, setWebsite] = useState<Website | null>(null);
+  const [pages, setPages] = useState<Page[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,9 +20,11 @@ export default function PublicSite() {
       setIsLoading(true);
       setError(null);
       try {
-        const content = await getSiteContentBySlug(slugify(username, 'site'));
-        if (content && content.data) {
-          setSiteData(content.data);
+        const ws = await getWebsiteBySlug(slugify(username, 'site'));
+        if (ws && ws.itemId) {
+          setWebsite(ws);
+          const ps = await getPages(ws.itemId, ws.tenantUserId);
+          setPages(ps);
         } else {
           setError('Site not found');
         }
@@ -50,7 +46,7 @@ export default function PublicSite() {
     );
   }
 
-  if (error || !siteData) {
+  if (error || !website) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#0D0F12] text-center px-4">
         <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-6">
@@ -65,7 +61,6 @@ export default function PublicSite() {
     );
   }
 
-  const pages = Array.isArray(siteData.pages) ? siteData.pages : [];
   const targetSlug = normalizePageSlug(routePath || 'home');
   const matchedPage = pages.find((p) => normalizePageSlug(p.slug) === targetSlug);
   const homePage = pages.find((p) => normalizePageSlug(p.slug) === 'home') || pages[0];
@@ -91,10 +86,10 @@ export default function PublicSite() {
           <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-full px-2 py-1.5 flex gap-1 pointer-events-auto shadow-2xl">
             {pages.map((page) => {
               const isActive = normalizePageSlug(activePage.slug) === normalizePageSlug(page.slug);
-              const path = getPublicSitePath(username || siteData.username || 'site', page.slug, routeBase);
+              const path = getPublicSitePath(username || website.slug || 'site', page.slug, routeBase);
               return (
                 <Link
-                  key={page.id}
+                  key={page.itemId || page.id}
                   to={path}
                   className={`text-xs font-medium px-4 py-2 rounded-full transition-all duration-300 ${
                     isActive
@@ -102,7 +97,7 @@ export default function PublicSite() {
                       : 'text-white/40 hover:text-white hover:bg-white/5'
                   }`}
                 >
-                  {page.title}
+                  {page.name}
                 </Link>
               );
             })}
@@ -112,7 +107,7 @@ export default function PublicSite() {
 
       <main className="flex-1 w-full min-h-screen bg-transparent">
         <motion.div
-          key={activePage.id}
+          key={activePage.itemId || activePage.id}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
@@ -120,10 +115,10 @@ export default function PublicSite() {
         >
           {pages.length > 1 && <div className="h-24 w-full" />}
 
-          {(activePage.components || []).map((comp: VibeComponentData) => (
+          {(activePage.layout || []).map((comp: VibeComponentData) => (
             <RenderComponent key={comp.id} data={comp} isEditor={false} />
           ))}
-          {(!activePage.components || activePage.components.length === 0) && (
+          {(!activePage.layout || activePage.layout.length === 0) && (
             <div className="h-[400px] flex items-center justify-center text-white/20">
               This page is empty.
             </div>
