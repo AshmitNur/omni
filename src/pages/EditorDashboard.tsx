@@ -178,8 +178,8 @@ export default function EditorDashboard() {
     return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
   }, [siteData, user]);
 
-  const activePage = siteData.pages.find((p: any) => p.id === activePageId);
-  const activeComponent = activePage?.components.find((c: any) => c.id === selectedComponentId) || null;
+  const activePage = siteData?.pages?.find((p: any) => p.id === activePageId) || null;
+  const activeComponent = activePage?.components?.find((c: any) => c.id === selectedComponentId) || null;
 
   const handleSave = async () => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -340,7 +340,7 @@ export default function EditorDashboard() {
                     <Plus className="w-4 h-4" />
                   </button>
                 </div>
-                {siteData.pages.map((page: any) => (
+                {siteData?.pages?.map((page: any) => (
                   <button
                     key={page.id}
                     onClick={() => { setActivePageId(page.id); setSelectedComponentId(null); }}
@@ -387,7 +387,7 @@ export default function EditorDashboard() {
           <div className="max-w-5xl mx-auto py-12 px-4 md:px-12 min-h-full flex flex-col">
             {activePage ? (
               <div className="flex-1 bg-black/40 border border-white/5 rounded-2xl shadow-2xl p-4 md:p-8 min-h-[800px]">
-                {activePage.components.length === 0 ? (
+                {!activePage.components || activePage.components.length === 0 ? (
                   <div className="w-full h-full min-h-[400px] flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-xl text-center p-8">
                     <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
                       <Layout className="w-8 h-8 text-white/20" />
@@ -403,9 +403,9 @@ export default function EditorDashboard() {
                   </div>
                 ) : (
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                    <SortableContext items={activePage.components.map((c: any) => c.id)} strategy={verticalListSortingStrategy}>
+                    <SortableContext items={activePage.components?.map((c: any) => c.id) || []} strategy={verticalListSortingStrategy}>
                       <div className="space-y-4">
-                        {activePage.components.map((comp: any) => (
+                        {activePage.components?.map((comp: any) => (
                           <SortableCanvasItem
                             key={comp.id}
                             component={comp}
